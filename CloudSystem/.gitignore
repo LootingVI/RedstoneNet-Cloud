@@ -1,0 +1,24 @@
+# Java Maven
+target/
+*.class
+
+# IDEs
+.idea/
+*.iml
+*.iws
+.project
+.settings/
+.classpath
+.vscode/
+
+# Build artifacts
+*.jar
+*.war
+*.bat
+
+# Runtime data & Local Server files
+Cloud-Runtime/
+
+# OS specific
+Thumbs.db
+.DS_Store

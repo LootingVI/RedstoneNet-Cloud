@@ -1,0 +1,5 @@
+name: CloudPlugin
+main: net.redstone.cloud.plugin.BungeeBridge
+version: 1.0-SNAPSHOT
+author: RedstoneNet
+description: The BungeeCord Bridge for the CloudSystem

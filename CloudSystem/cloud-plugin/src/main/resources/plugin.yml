@@ -1,0 +1,11 @@
+name: CloudPlugin
+version: 1.0-SNAPSHOT
+main: net.redstone.cloud.plugin.CloudPlugin
+api-version: 1.13
+author: RedstoneNet
+description: The Bridge Plugin for the RedstoneNet CloudSystem.
+commands:
+  cloud:
+    description: RedstoneNet Cloud Command
+    aliases: [rc, redstonecloud]
+    permission: redstonecloud.admin

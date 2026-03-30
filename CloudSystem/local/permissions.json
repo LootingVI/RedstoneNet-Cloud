@@ -1,0 +1,22 @@
+{
+  "groups": [
+    {
+      "name": "default",
+      "prefix": "§7Player | ",
+      "isDefault": true,
+      "permissions": [
+        "cloud.join"
+      ]
+    },
+    {
+      "name": "admin",
+      "prefix": "§cAdmin | ",
+      "isDefault": false,
+      "permissions": [
+        "*",
+        "redstonecloud.admin"
+      ]
+    }
+  ],
+  "users": []
+}
