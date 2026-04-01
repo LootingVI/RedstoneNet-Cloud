@@ -67,7 +67,7 @@ public class CloudNode {
                 props.setProperty("tablist.enabled", "true");
                 props.setProperty("nametags.enabled", "true");
                 props.setProperty("msg.maintenanceKick",
-                        "&cDas Netzwerk befindet sich im Wartungsmodus!\n&7Komm spaeter wieder.");
+                        "&cThe network is currently in maintenance mode!\n&7Please come back later.");
                 props.setProperty("msg.fallbackKick", "&cDu wurdest auf die Lobby gesendet: &7%reason%");
                 props.setProperty("sign.line1.online", "&b[Cloud]");
                 props.setProperty("sign.line2.online", "&7%server%");
@@ -485,10 +485,10 @@ public class CloudNode {
                         }
                     }
                 } else {
-                    Logger.raw("Verwendung:");
-                    Logger.raw("perms group <name> add/remove <perm>");
-                    Logger.raw("perms user <name> group set <group>");
-                    Logger.raw("perms user <name> add/remove <perm>");
+                    Logger.raw("Usage:");
+                    Logger.raw("  perms group <name> add/remove <perm>");
+                    Logger.raw("  perms user <name> group set <group>");
+                    Logger.raw("  perms user <name> add/remove <perm>");
                 }
                 break;
             default:
@@ -508,7 +508,15 @@ public class CloudNode {
             props.load(Files.newInputStream(file.toPath()));
             this.host = props.getProperty("host", "127.0.0.1");
             this.port = Integer.parseInt(props.getProperty("port", "3000"));
-            this.authKey = props.getProperty("authKey", "cloud-secret");
+            this.authKey = props.getProperty("authKey", "");
+            if (this.authKey.isEmpty()) {
+                this.authKey = java.util.UUID.randomUUID().toString().replace("-", "");
+                props.setProperty("authKey", this.authKey);
+                try (OutputStream autoOut = new FileOutputStream(file)) {
+                    props.store(autoOut, "RedstoneNet Cloud Config");
+                }
+                Logger.success("-> Auth key auto-generated and saved to config.properties");
+            }
             Logger.info("Configuration loaded! (" + host + ":" + port + ")");
         } catch (Exception e) {
             Logger.error("Error loading config: " + e.getMessage());

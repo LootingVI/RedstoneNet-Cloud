@@ -35,6 +35,12 @@ public class WebServer {
             server.createContext("/api/logs", new LogsHandler());
             server.createContext("/api/servercommand", new ServerCommandHandler());
             server.createContext("/api/permissions", new PermissionsHandler());
+            server.createContext("/api/software", new SoftwareHandler());
+            server.createContext("/api/maintenance", new MaintenanceHandler());
+            server.createContext("/api/backup", new BackupHandler());
+            server.createContext("/api/autoscale", new AutoScaleHandler());
+            server.createContext("/api/assignpack", new AssignPackHandler());
+            server.createContext("/packs/", new PackFileHandler());
             server.setExecutor(null);
             server.start();
             Logger.info("-> Web Dashboard started on http://127.0.0.1:" + port);
@@ -170,9 +176,27 @@ public class WebServer {
                 gObj.addProperty("startPort", g.getStartPort());
                 gObj.addProperty("minOnline", g.getMinOnline());
                 gObj.addProperty("bedrock", g.hasBedrockSupport());
+                gObj.addProperty("autoScaleEnabled", g.isAutoScaleEnabled());
+                gObj.addProperty("autoScaleThreshold", g.getAutoScaleThreshold());
+                gObj.addProperty("maxInstances", g.getMaxInstances());
+                gObj.addProperty("maxPlayers", g.getMaxPlayers());
+                gObj.addProperty("resourcePack", g.getResourcePack() != null ? g.getResourcePack() : "");
+                gObj.addProperty("forceResourcePack", g.isForceResourcePack());
                 groups.add(gObj);
             }
             res.add("groups", groups);
+
+            JsonArray packs = new JsonArray();
+            File packDir = new File("local/resourcepacks");
+            packDir.mkdirs();
+            File[] files = packDir.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    if (f.getName().endsWith(".zip")) packs.add(f.getName());
+                }
+            }
+            res.add("packs", packs);
+
             sendJson(exchange, res);
 
         }
@@ -391,6 +415,146 @@ public class WebServer {
         }
     }
 
+    class SoftwareHandler implements HttpHandler {
+        private boolean isPlugin(String name) {
+            String lower = name.toLowerCase();
+            return lower.startsWith("geyser-") || lower.startsWith("floodgate-");
+        }
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            sendCorsHeaders(exchange);
+            if ("OPTIONS".equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(204, -1);
+                return;
+            }
+            if (!checkAuth(exchange)) return;
+            File softwareDir = new File("local/software");
+            softwareDir.mkdirs();
+            JsonObject res = new JsonObject();
+            JsonArray list = new JsonArray();
+            File[] files = softwareDir.listFiles((dir, name) ->
+                name.endsWith(".jar") && !isPlugin(name));
+            if (files != null) {
+                for (File f : files)
+                    list.add(f.getName());
+            }
+            res.add("software", list);
+            sendJson(exchange, res);
+        }
+    }
+
+    class MaintenanceHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            sendCorsHeaders(exchange);
+            if ("OPTIONS".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(204, -1); return; }
+            if (!checkAuth(exchange)) return;
+            if ("GET".equals(exchange.getRequestMethod())) {
+                JsonObject res = new JsonObject();
+                res.addProperty("maintenance", CloudNode.getInstance().isMaintenance());
+                sendJson(exchange, res);
+            } else if ("POST".equals(exchange.getRequestMethod())) {
+                try (InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8)) {
+                    JsonObject body = com.google.gson.JsonParser.parseReader(isr).getAsJsonObject();
+                    boolean enabled = body.has("enabled") && body.get("enabled").getAsBoolean();
+                    CloudNode.getInstance().setMaintenance(enabled);
+                    JsonObject res = new JsonObject();
+                    res.addProperty("success", true);
+                    sendJson(exchange, res);
+                } catch (Exception e) { sendError(exchange, 400, "Bad Request"); }
+            }
+        }
+    }
+
+    class BackupHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            sendCorsHeaders(exchange);
+            if ("OPTIONS".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(204, -1); return; }
+            if (!checkAuth(exchange)) return;
+            try (InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8)) {
+                JsonObject body = com.google.gson.JsonParser.parseReader(isr).getAsJsonObject();
+                if (!body.has("server")) { sendError(exchange, 400, "Missing server field"); return; }
+                String name = body.get("server").getAsString();
+                CloudServerProcess p = CloudNode.getInstance().getServerManager().getProcess(name);
+                JsonObject res = new JsonObject();
+                if (p != null) {
+                    new Thread(() -> p.createBackup(true), "Backup-" + name).start();
+                    res.addProperty("success", true);
+                } else {
+                    res.addProperty("success", false);
+                    res.addProperty("error", "Server not found");
+                }
+                sendJson(exchange, res);
+            } catch (Exception e) { sendError(exchange, 400, "Bad Request"); }
+        }
+    }
+
+    class AutoScaleHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            sendCorsHeaders(exchange);
+            if ("OPTIONS".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(204, -1); return; }
+            if (!checkAuth(exchange)) return;
+            try (InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8)) {
+                JsonObject body = com.google.gson.JsonParser.parseReader(isr).getAsJsonObject();
+                if (!body.has("group")) { sendError(exchange, 400, "Missing group"); return; }
+                String name = body.get("group").getAsString();
+                Group g = CloudNode.getInstance().getGroupManager().getGroup(name);
+                if (g != null) {
+                    if (body.has("enabled")) g.setAutoScaleEnabled(body.get("enabled").getAsBoolean());
+                    if (body.has("threshold")) g.setAutoScaleThreshold(body.get("threshold").getAsInt());
+                    CloudNode.getInstance().getGroupManager().saveGroups();
+                    JsonObject res = new JsonObject();
+                    res.addProperty("success", true);
+                    sendJson(exchange, res);
+                } else sendError(exchange, 404, "Group not found");
+            } catch (Exception e) { sendError(exchange, 400, "Bad Request"); }
+        }
+    }
+
+    class AssignPackHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            sendCorsHeaders(exchange);
+            if ("OPTIONS".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(204, -1); return; }
+            if (!checkAuth(exchange)) return;
+            try (InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8)) {
+                JsonObject body = com.google.gson.JsonParser.parseReader(isr).getAsJsonObject();
+                if (!body.has("group")) { sendError(exchange, 400, "Missing group"); return; }
+                String name = body.get("group").getAsString();
+                Group g = CloudNode.getInstance().getGroupManager().getGroup(name);
+                if (g != null) {
+                    if (body.has("pack")) g.setResourcePack(body.get("pack").getAsString());
+                    if (body.has("force")) g.setForceResourcePack(body.get("force").getAsBoolean());
+                    CloudNode.getInstance().getGroupManager().saveGroups();
+                    JsonObject res = new JsonObject();
+                    res.addProperty("success", true);
+                    sendJson(exchange, res);
+                } else sendError(exchange, 404, "Group not found");
+            } catch (Exception e) { sendError(exchange, 400, "Bad Request"); }
+        }
+    }
+
+    class PackFileHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            sendCorsHeaders(exchange);
+            if ("OPTIONS".equals(exchange.getRequestMethod())) { exchange.sendResponseHeaders(204, -1); return; }
+            String path = exchange.getRequestURI().getPath().substring(7); // packs/ length
+            File pack = new File("local/resourcepacks", path);
+            if (!pack.exists() || !pack.isFile()) {
+                sendError(exchange, 404, "Pack not found");
+                return;
+            }
+            exchange.getResponseHeaders().add("Content-Type", "application/zip");
+            exchange.sendResponseHeaders(200, pack.length());
+            try (OutputStream os = exchange.getResponseBody()) {
+                Files.copy(pack.toPath(), os);
+            }
+        }
+    }
+
     // ===================== HTML =====================
 
     private String buildHtml() {
@@ -468,6 +632,11 @@ public class WebServer {
                 + ".table th{color:var(--muted);font-weight:500;background:var(--panel2);}\n"
                 + ".table tr:hover td{background:var(--panel2);}\n"
                 + ".empty-state{text-align:center;padding:40px;color:var(--muted);font-size:0.9em;}\n"
+                + ".toast{position:fixed;bottom:24px;right:24px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 20px;font-size:0.85em;color:var(--text);box-shadow:0 8px 24px rgba(0,0,0,0.4);z-index:9999;opacity:0;transform:translateY(10px);transition:all 0.3s;pointer-events:none;max-width:320px;}\n"
+                + ".toast.show{opacity:1;transform:translateY(0);}\n"
+                + ".toast.success{border-color:rgba(45,255,142,0.4);color:var(--green);}\n"
+                + ".toast.error{border-color:rgba(255,58,58,0.4);color:var(--red);}\n"
+                + ".toast.info{border-color:rgba(58,143,255,0.4);color:var(--blue);}\n"
                 + "</style>\n"
                 + "</head>\n"
                 + "<body>\n"
@@ -490,6 +659,7 @@ public class WebServer {
                 + "    </div>\n"
                 + "    <div class=\"nav-right\">\n"
                 + "      <span class=\"badge\" id=\"onlineBadge\">● ONLINE</span>\n"
+                + "      <button id=\"maintenanceBtn\" onclick=\"toggleMaintenance()\" style=\"font-size:0.8em;\">🔧 Maintenance: OFF</button>\n"
                 + "      <button class=\"btn-red\" onclick=\"logout()\">Logout</button>\n"
                 + "    </div>\n"
                 + "  </nav>\n"
@@ -549,7 +719,7 @@ public class WebServer {
                 + "  <div class=\"form-row\"><label>Group Name</label><input id=\"gName\" placeholder=\"e.g. Lobby\"></div>\n"
                 + "  <div class=\"form-row\"><label>RAM (MB)</label><input type=\"number\" id=\"gMemory\" value=\"1024\"></div>\n"
                 + "  <div class=\"form-row\"><label>Type</label><select id=\"gProxy\"><option value=\"false\">Subserver (Paper/Spigot)</option><option value=\"true\">Proxy (Velocity / BungeeCord)</option></select></div>\n"
-                + "  <div class=\"form-row\"><label>Cloud Software JAR</label><input id=\"gSoftware\" placeholder=\"e.g. paper.jar\"></div>\n"
+                + "  <div class=\"form-row\"><label>Cloud Software JAR</label><select id=\"gSoftware\"><option value=\"\">Loading...</option></select></div>\n"
                 + "  <div class=\"form-row\"><label>Static Port (0 = dynamic)</label><input type=\"number\" id=\"gPort\" value=\"0\"></div>\n"
                 + "  <div class=\"form-row-inline\" style=\"margin-bottom:13px;\"><input type=\"checkbox\" id=\"gStatic\"><label style=\"margin-left:7px;font-size:0.85em;\">Static Service (Persistent Data)</label></div>\n"
                 + "  <div class=\"form-row-inline\" style=\"margin-bottom:13px;\"><input type=\"checkbox\" id=\"gBedrock\"><label style=\"margin-left:7px;font-size:0.85em;\">Bedrock Support (GeyserMC & Floodgate)</label></div>\n"
@@ -609,7 +779,7 @@ public class WebServer {
                 + "</div>\n"
                 + "<script>"
                 + "let token=localStorage.getItem('rn_tok')||'';"
-                + "let currentConsoleServer=null,consoleTimer=null;"
+                + "let currentConsoleServer=null,consoleTimer=null,maintenanceState=false;"
                 + "let permData={groups:[],users:[]};"
                 + "let editingGroup=null,editingUser=null;"
                 + "if(token)document.getElementById('tokenInput').value=token;"
@@ -617,13 +787,13 @@ public class WebServer {
                 + "  const t=document.getElementById('tokenInput').value;"
                 + "  const r=await fetch('/api/auth',{method:'POST',body:JSON.stringify({token:t})});"
                 + "  const d=await r.json();"
-                + "  if(d.success){token=t;localStorage.setItem('rn_tok',t);document.getElementById('auth-screen').style.display='none';document.getElementById('dashboard').style.display='block';refresh();loadPermissions();setInterval(refresh,5000);}"
-                + "  else alert('Token invalid!');"
+                + "  if(d.success){token=t;localStorage.setItem('rn_tok',t);document.getElementById('auth-screen').style.display='none';document.getElementById('dashboard').style.display='block';refresh();loadPermissions();loadMaintenance();setInterval(refresh,5000);}"
+                + "  else toast('❌ Invalid token!','error');"
                 + "}"
                 + "function logout(){token='';localStorage.removeItem('rn_tok');location.reload();}"
                 + "async function api(url,opts={}){opts.headers={...(opts.headers||{}),'Authorization':'Bearer '+token};const r=await fetch(url,opts);if(r.status===401)logout();return r;}"
                 + "function showPage(p){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.nav-tab').forEach(x=>x.classList.remove('active'));document.getElementById('page-'+p).classList.add('active');document.getElementById('tab-'+p).classList.add('active');}"
-                + "function openModal(id){document.getElementById(id).classList.add('open');}"
+                + "function openModal(id){document.getElementById(id).classList.add('open');if(id==='modalCreateGroup')loadSoftware();}"
                 + "function closeModal(id){document.getElementById(id).classList.remove('open');}"
                 + "async function refresh(){"
                 + "  if(!token)return;"
@@ -633,11 +803,22 @@ public class WebServer {
                 + "  const gG=document.getElementById('groupsGrid');gG.innerHTML='';"
                 + "  d.groups.forEach(g=>{"
                 + "    const esc=g.name.replace(/'/g,\"\\\\'\");"
+                + "    let packOpts = '<option value=\"\">[No Pack]</option>';"
+                + "    d.packs.forEach(p => { packOpts += `<option value=\"${p}\" ${g.resourcePack===p?'selected':''}>${p}</option>`; });"
                 + "    gG.innerHTML+=`<div class=\"card\">"
                 + "      <div class=\"card-title\">${g.proxy?'🌐':'📦'} ${g.name} ${g.bedrock?'<span class=\"badge\" style=\"background:rgba(255,165,0,0.15);color:orange;border-color:orange\">📱 Bedrock</span>':''}</div>"
-                + "      <div class=\"card-meta\"><span>💾 ${g.memory}MB RAM</span><span>${g.proxy?'Proxy':'Subserver'}</span><span>📍 Port: ${g.startPort > 0 ? g.startPort : 'dynamic'}</span><span style=\"color:var(--green);\">min. ${g.minOnline} online</span></div>"
+                + "      <div class=\"card-meta\"><span>💾 ${g.memory}MB RAM</span><span>${g.proxy?'Proxy':'Subserver'}</span><span>⚙️ ${g.software}</span><span>📍 Port: ${g.startPort > 0 ? g.startPort : 'dynamic'}</span><span style=\"color:var(--green);\">min. ${g.minOnline} online</span></div>"
+                + "      <div style=\"padding:10px;background:rgba(0,0,0,0.15);border-radius:4px;margin-bottom:10px;\">"
+                + "        <div style=\"display:flex;justify-content:space-between;margin-bottom:5px;font-size:0.9em;\">"
+                + "          <span><input type=\"checkbox\" onchange=\"updateAutoScale('${esc}',this.checked,${g.autoScaleThreshold})\" ${g.autoScaleEnabled?'checked':''}> Auto-Scale</span>"
+                + "          <span id=\"asLabel-${esc}\">${g.autoScaleThreshold}% Fill (Max ${g.maxInstances})</span>"
+                + "        </div>"
+                + "        <input type=\"range\" style=\"width:100%;\" min=\"10\" max=\"100\" step=\"5\" value=\"${g.autoScaleThreshold}\" onchange=\"updateAutoScale('${esc}',${g.autoScaleEnabled},this.value)\" oninput=\"document.getElementById('asLabel-${esc}').textContent=this.value+'% Fill (Max ${g.maxInstances})'\">"
+                + "      </div>"
+                + "      ${!g.proxy ? `<div style=\"padding:10px;background:rgba(0,0,0,0.15);border-radius:4px;margin-bottom:10px;\"><label style=\"font-size:0.8em;color:var(--muted);\">🖼️ ResourcePack:</label><select onchange=\"updateGrpPack('${esc}', this.value, document.getElementById('forcePack-${esc}').checked)\" style=\"width:100%;margin-top:5px;\">${packOpts}</select><div style=\"margin-top:6px;font-size:0.8em;\"><input type=\"checkbox\" id=\"forcePack-${esc}\" onchange=\"updateGrpPack('${esc}', '${g.resourcePack||''}', this.checked)\" ${g.forceResourcePack?'checked':''}> <label for=\"forcePack-${esc}\">Force pack to play</label></div></div>` : ''}"
                 + "      <div class=\"card-actions\">"
-                + "        <button class=\"btn-green\" style=\"flex:1\" onclick=\"runCmd('start ${esc} 1')\">▶ Start</button>"
+                + "        <input type=\"number\" min=\"1\" max=\"10\" value=\"1\" class=\"start-cnt\" data-group=\"${esc}\" style=\"width:46px;text-align:center;padding:6px 4px;\">"
+                + "        <button class=\"btn-green\" style=\"flex:1\" onclick=\"startGroup('${esc}')\">▶ Start</button>"
                 + "        <button class=\"btn-red\" onclick=\"if(confirm('Delete group ${esc}?'))runCmd('deletegroup ${esc}')\">🗑</button>"
                 + "      </div>"
                 + "    </div>`;"
@@ -653,6 +834,7 @@ public class WebServer {
                 + "      </div>"
                 + "      <div class=\"card-actions\">"
                 + "        <button class=\"btn-blue\" style=\"flex:1\" onclick=\"openConsole('${esc}')\">💻 Console</button>"
+                + "        <button onclick=\"backupServer('${esc}')\">📦</button>"
                 + "        <button class=\"btn-red\" onclick=\"runCmd('stopserver ${esc}')\">⏹</button>"
                 + "      </div>"
                 + "    </div>`;"
@@ -669,7 +851,7 @@ public class WebServer {
                 + "  const st=document.getElementById('gStatic').checked;"
                 + "  const bedrock=document.getElementById('gBedrock').checked;"
                 + "  const mo=document.getElementById('gMinOnline').value||0;"
-                + "  if(!n)return alert('Name missing!');"
+                + "  if(!n){toast('⚠️ Group name is required!','error');return;}"
                 + "  runCmd(`create ${n} ${m} ${st} ${p} ${s} ${bedrock} ${port} ${mo}`);"
                 + "  closeModal('modalCreateGroup');"
                 + "}"
@@ -712,6 +894,15 @@ public class WebServer {
                 + "async function addUserPerm(){const p=document.getElementById('newUserPerm').value.trim();if(!p)return;await permPost({action:'addUserPerm',user:editingUser,perm:p});document.getElementById('newUserPerm').value='';openEditUser(editingUser);}"
                 + "async function removeUserPerm(p){await permPost({action:'removeUserPerm',user:editingUser,perm:p});openEditUser(editingUser);}"
                 + "async function deletePermUser(name){if(confirm('Remove player '+name+'?'))await permPost({action:'deleteUser',user:name});}"
+                + "async function loadMaintenance(){const r=await api('/api/maintenance');if(r.status!==200)return;const d=await r.json();maintenanceState=d.maintenance;updateMaintenanceBtn();}"
+                + "function updateMaintenanceBtn(){const btn=document.getElementById('maintenanceBtn');if(!btn)return;if(maintenanceState){btn.textContent='🔧 Maintenance: ON';btn.style.cssText='background:rgba(255,58,58,0.4);color:var(--red);border-color:rgba(255,58,58,0.6);';}else{btn.textContent='🔧 Maintenance: OFF';btn.style.cssText='';}}"
+                + "async function toggleMaintenance(){maintenanceState=!maintenanceState;await api('/api/maintenance',{method:'POST',body:JSON.stringify({enabled:maintenanceState})});updateMaintenanceBtn();toast(maintenanceState?'🔧 Maintenance ENABLED':'✅ Maintenance disabled',maintenanceState?'error':'success');}"
+                + "async function updateAutoScale(grp, enabled, threshold){ await api('/api/autoscale',{method:'POST',body:JSON.stringify({group:grp,enabled:enabled,threshold:Number(threshold)})}); }"
+                + "async function updateGrpPack(grp, packName, forcePack){ await api('/api/assignpack',{method:'POST',body:JSON.stringify({group:grp,pack:packName,force:forcePack})}); }"
+                + "function startGroup(name){const inp=document.querySelector('.start-cnt[data-group=\"'+name+'\"]');const cnt=inp?Number(inp.value)||1:1;runCmd('start '+name+' '+cnt);toast('▶ Starting '+cnt+'× '+name,'success');}"
+                + "async function backupServer(name){const r=await api('/api/backup',{method:'POST',body:JSON.stringify({server:name})});const d=await r.json();if(d.success)toast('📦 Backup started: '+name,'success');else toast('❌ '+(d.error||'Error'),'error');}"
+                + "async function loadSoftware(){const r=await api('/api/software');if(r.status!==200)return;const d=await r.json();const sel=document.getElementById('gSoftware');sel.innerHTML='';if(!d.software||d.software.length===0){sel.innerHTML='<option value=\"\">(No software found in local/software/)</option>';return;}d.software.forEach(s=>sel.innerHTML+=`<option value=\"${s}\">${s}</option>`);}" 
+                + "function toast(msg,type='success'){let t=document.getElementById('_toast');if(!t){t=document.createElement('div');t.id='_toast';t.className='toast';document.body.appendChild(t);}t.textContent=msg;t.className='toast '+type;requestAnimationFrame(()=>requestAnimationFrame(()=>t.classList.add('show')));clearTimeout(t._tm);t._tm=setTimeout(()=>t.classList.remove('show'),3200);}"
                 + "document.addEventListener('keydown',e=>{if(e.key==='Enter'){if(document.activeElement===document.getElementById('cmdInput'))sendCommand();if(document.activeElement===document.getElementById('serverCmdInput'))sendServerCommand();if(document.activeElement===document.getElementById('tokenInput'))login();}});</script>\n"
                 + "</body>\n"
                 + "</html>";

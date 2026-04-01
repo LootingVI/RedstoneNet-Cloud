@@ -11,6 +11,9 @@ A high-performance, modular, and professional-grade Cloud Infrastructure for Min
 *   **Automated Bedrock Integration**: Built-in support for GeyserMC and Floodgate, including automated key synchronization.
 *   **Integrated Permission System**: Manage roles and permissions across the whole network.
 *   **Automated Backup System**: Robust backup logic for static server environments.
+*   **Global Anti-VPN Protection**: Real-time identification and blocking of VPN/Proxy connections at the proxy level.
+*   **Auto-Scaling 📈**: Automatically scale up server instances based on player count thresholds, and scale down when empty.
+*   **ResourcePack CDN 📦**: Centralized HTTP distribution of server resource packs with automatic SHA-1 generation and in-game application.
 *   **Modular Architecture**: Separated API, Node, and Plugin components for maximum flexibility.
 
 ---
@@ -71,6 +74,23 @@ Refresh the cloud or edit `settings.properties` to set global MOTDs and Tablists
 1.  Access `http://127.0.0.1:3030`.
 2.  Type `webtokens create` in the cloud console.
 3.  Copy and paste the token to log in.
+
+### 6. Anti-VPN Features
+To enable the built-in Anti-VPN system:
+1.  Open `settings.properties` in the root folder.
+2.  Set `vpn.block.enabled` to `true`.
+3.  (Optional) Add your API key from `proxycheck.io` to `vpn.api.key` for higher rate limits.
+4.  Custom kick messages can be set via `vpn.kick.message`.
+### 7. Performance & Auto-Restart
+The system includes a performance-based auto-restart logic to ensure stability:
+1.  Open `settings.properties` in the root folder.
+2.  Set `autorestart.tps.enabled` to `true`.
+3.  Modify `autorestart.tps.threshold` (default `10.0`).
+4.  Servers whose TPS falls below this threshold will be automatically restarted by the Cloud.
+
+### 8. Auto-Scaling & Resource Packs
+1.  **Auto-Scaling**: Configurable completely via the Web Dashboard slider. If a server reaches the threshold % of players, a new one spins up (up to the configured max limit).
+2.  **Resource Packs**: Drop your `.zip` files into `local/resourcepacks/`. Select them in the Web Dashboard for any group. The cloud automatically calculates the SHA-1 hash and applies it internally to players when they join.
 
 ---
 

@@ -52,6 +52,10 @@ public class CloudPlugin extends JavaPlugin implements Listener {
     private final Map<String, ServerStatusPacket> serverStatus = new HashMap<>();
     private Map<String, String> settings = new HashMap<>();
 
+    private String resourcePackUrl = "";
+    private byte[] resourcePackHash = new byte[0];
+    private boolean resourcePackForced = false;
+
     @Override
     public void onEnable() {
         getLogger().info("[CloudPlugin] Cloud-Bridge starting...");
@@ -121,6 +125,17 @@ public class CloudPlugin extends JavaPlugin implements Listener {
                 String authKey = props.getProperty("cloud.authKey");
                 int serverPort = Integer.parseInt(props.getProperty("cloud.serverPort", "0"));
                 boolean isProxy = Boolean.parseBoolean(props.getProperty("cloud.isProxy", "false"));
+
+                resourcePackUrl = props.getProperty("cloud.resourcePackUrl", "");
+                String hashHex = props.getProperty("cloud.resourcePackHash", "");
+                if (hashHex != null && hashHex.length() == 40) {
+                    resourcePackHash = new byte[20];
+                    for (int i = 0; i < 40; i += 2) {
+                        resourcePackHash[i / 2] = (byte) ((Character.digit(hashHex.charAt(i), 16) << 4)
+                                + Character.digit(hashHex.charAt(i+1), 16));
+                    }
+                }
+                resourcePackForced = Boolean.parseBoolean(props.getProperty("cloud.resourcePackForced", "false"));
 
                 socket = new Socket(host, port);
                 out = new ObjectOutputStream(socket.getOutputStream());
@@ -320,6 +335,18 @@ public class CloudPlugin extends JavaPlugin implements Listener {
         }
         setupPermissions(event.getPlayer());
         updateTablist(event.getPlayer());
+
+        if (resourcePackUrl != null && !resourcePackUrl.isEmpty()) {
+            getServer().getScheduler().runTaskLater(this, () -> {
+                try {
+                    event.getPlayer().setResourcePack(resourcePackUrl, resourcePackHash, "§ePlease accept the resource pack for this server mode!", resourcePackForced);
+                } catch (NoSuchMethodError e) {
+                    try {
+                        event.getPlayer().setResourcePack(resourcePackUrl, resourcePackHash);
+                    } catch (Exception ex) {}
+                }
+            }, 20L); // 1 sec delay to ensure login is complete
+        }
     }
 
     @EventHandler

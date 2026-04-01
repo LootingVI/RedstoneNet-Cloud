@@ -12,6 +12,12 @@ public class Group {
     private int maxRestarts; 
     private String templateName;
     private boolean bedrockSupport;
+    private boolean autoScaleEnabled = false;
+    private int autoScaleThreshold = 80;
+    private int maxInstances = 5;
+    private int maxPlayers = 100; // max players per instance (for scale calculation)
+    private String resourcePack = "";
+    private boolean forceResourcePack = false;
 
     public Group(String name, int memory, boolean staticService, boolean proxy, String softwareFile, boolean bedrockSupport) {
         this(name, memory, staticService, proxy, softwareFile, 0, bedrockSupport);
@@ -44,4 +50,16 @@ public class Group {
     public void setTemplateName(String templateName) { this.templateName = templateName; }
     public boolean hasBedrockSupport() { return bedrockSupport; }
     public void setBedrockSupport(boolean bedrockSupport) { this.bedrockSupport = bedrockSupport; }
+    public boolean isAutoScaleEnabled() { return autoScaleEnabled; }
+    public void setAutoScaleEnabled(boolean autoScaleEnabled) { this.autoScaleEnabled = autoScaleEnabled; }
+    public int getAutoScaleThreshold() { return autoScaleThreshold; }
+    public void setAutoScaleThreshold(int autoScaleThreshold) { this.autoScaleThreshold = autoScaleThreshold; }
+    public int getMaxInstances() { return maxInstances; }
+    public void setMaxInstances(int maxInstances) { this.maxInstances = maxInstances; }
+    public int getMaxPlayers() { return maxPlayers; }
+    public void setMaxPlayers(int maxPlayers) { this.maxPlayers = maxPlayers; }
+    public String getResourcePack() { return resourcePack; }
+    public void setResourcePack(String resourcePack) { this.resourcePack = resourcePack; }
+    public boolean isForceResourcePack() { return forceResourcePack; }
+    public void setForceResourcePack(boolean forceResourcePack) { this.forceResourcePack = forceResourcePack; }
 }

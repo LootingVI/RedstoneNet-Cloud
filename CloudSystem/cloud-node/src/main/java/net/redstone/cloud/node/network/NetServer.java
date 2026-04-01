@@ -40,7 +40,7 @@ public class NetServer {
 
     public NetServer(int port) {
         this.port = port;
-        this.executor = Executors.newCachedThreadPool();
+        this.executor = Executors.newFixedThreadPool(50);
     }
 
     public void start() {

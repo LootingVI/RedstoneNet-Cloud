@@ -7,6 +7,8 @@ import net.redstone.cloud.node.CloudNode;
 import java.io.*;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
+import java.net.URLEncoder;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -128,11 +130,10 @@ public class CloudServerProcess {
         Logger.warn("Restarting " + serverName + "... (Attempt " + attempt + "/" + group.getMaxRestarts() + ")");
         logCache.add("[CLOUD] >>> Auto-Restart " + attempt + "/" + group.getMaxRestarts() + " <<<");
 
-        try {
-            Thread.sleep(2000);
-        } catch (InterruptedException ignored) {
-        }
-        start();
+        new Thread(() -> {
+            try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+            start();
+        }, "Restart-" + serverName).start();
     }
 
     private void prepareDirectory() throws IOException {
@@ -308,13 +309,36 @@ public class CloudServerProcess {
             }
         }
 
+        String resourcePackUrl = "";
+        String resourcePackHash = "";
+        if (!group.isProxy() && group.getResourcePack() != null && !group.getResourcePack().isEmpty()) {
+            File pack = new File("local/resourcepacks", group.getResourcePack());
+            if (pack.exists()) {
+                try {
+                    String encodedName = URLEncoder.encode(group.getResourcePack(), "UTF-8").replace("+", "%20");
+                    resourcePackUrl = "http://" + CloudNode.getInstance().getHost() + ":3030/packs/" + encodedName;
+                    MessageDigest digest = MessageDigest.getInstance("SHA-1");
+                    byte[] bytes = Files.readAllBytes(pack.toPath());
+                    byte[] hashed = digest.digest(bytes);
+                    StringBuilder sb = new StringBuilder();
+                    for (byte b : hashed) sb.append(String.format("%02x", b));
+                    resourcePackHash = sb.toString();
+                } catch (Exception e) {
+                    Logger.error("Failed to prepare resource pack: " + e.getMessage());
+                }
+            }
+        }
+
         File wrapperConfig = new File(workingDirectory, "wrapper.properties");
         String wrapperContent = "cloud.host=" + CloudNode.getInstance().getHost() + "\n"
                 + "cloud.port=" + CloudNode.getInstance().getPort() + "\n"
                 + "cloud.serverName=" + serverName + "\n"
                 + "cloud.authKey=" + CloudNode.getInstance().getAuthKey() + "\n"
                 + "cloud.serverPort=" + port + "\n"
-                + "cloud.isProxy=" + group.isProxy() + "\n";
+                + "cloud.isProxy=" + group.isProxy() + "\n"
+                + "cloud.resourcePackUrl=" + resourcePackUrl + "\n"
+                + "cloud.resourcePackHash=" + resourcePackHash + "\n"
+                + "cloud.resourcePackForced=" + group.isForceResourcePack() + "\n";
         Files.writeString(wrapperConfig.toPath(), wrapperContent);
     }
 

@@ -8,12 +8,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import net.redstone.cloud.node.group.Group;
 
 public class ServerManager {
 
     private final List<CloudServerProcess> activeProcesses = new CopyOnWriteArrayList<>();
-    private int nextPort = 40000;
+    private final AtomicInteger nextPort = new AtomicInteger(40000);
+    private final ConcurrentLinkedDeque<Integer> freePorts = new ConcurrentLinkedDeque<>();
+    private final Map<String, Long> scaleUpCooldown = new ConcurrentHashMap<>();
+    private final Map<String, Long> scaleDownCooldown = new ConcurrentHashMap<>();
 
     // Player count per server (serverName → count)
     private final Map<String, Integer> playerCounts = new ConcurrentHashMap<>();
@@ -51,7 +58,8 @@ public class ServerManager {
             if (group.getStartPort() > 0) {
                 port = group.getStartPort() + id - 1;
             } else {
-                port = nextPort++;
+                Integer recycled = freePorts.pollFirst();
+                port = recycled != null ? recycled : nextPort.getAndIncrement();
             }
             CloudServerProcess process = new CloudServerProcess(group, id, port);
             activeProcesses.add(process);
@@ -62,6 +70,7 @@ public class ServerManager {
     public void stopServer(String serverName) {
         CloudServerProcess target = getProcess(serverName);
         if (target != null) {
+            if (target.getGroup().getStartPort() <= 0) freePorts.addLast(target.getPort());
             target.stop();
             activeProcesses.remove(target);
             playerCounts.remove(serverName);
@@ -88,6 +97,7 @@ public class ServerManager {
     // Called by CloudServerProcess when restart limit is reached
     public void onProcessCrashed(CloudServerProcess process) {
         Logger.error("Server " + process.getServerName() + " has permanently failed!");
+        if (process.getGroup().getStartPort() <= 0) freePorts.addLast(process.getPort());
         activeProcesses.remove(process);
         playerCounts.remove(process.getServerName());
 
@@ -108,7 +118,48 @@ public class ServerManager {
     public void updatePlayerCount(String serverName, int count) {
         playerCounts.put(serverName, count);
         CloudServerProcess proc = getProcess(serverName);
-        if (proc != null) proc.setPlayerCount(count);
+        if (proc != null) {
+            proc.setPlayerCount(count);
+            String groupName = serverName.contains("-")
+                ? serverName.substring(0, serverName.lastIndexOf("-"))
+                : serverName;
+            checkAutoScale(groupName);
+        }
+    }
+
+    public void checkAutoScale(String groupName) {
+        Group group = CloudNode.getInstance().getGroupManager().getGroup(groupName);
+        if (group == null || !group.isAutoScaleEnabled()) return;
+
+        List<CloudServerProcess> procs = activeProcesses.stream()
+                .filter(p -> p.getServerName().startsWith(group.getName() + "-") && p.isAlive())
+                .collect(Collectors.toList());
+        int running = procs.size();
+        int maxP = group.getMaxPlayers() > 0 ? group.getMaxPlayers() : 100;
+        long now = System.currentTimeMillis();
+
+        // --- Scale UP ---
+        boolean anyOverloaded = procs.stream()
+                .anyMatch(p -> (p.getPlayerCount() * 100.0 / maxP) >= group.getAutoScaleThreshold());
+        long lastUp = scaleUpCooldown.getOrDefault(groupName, 0L);
+        if (anyOverloaded && running < group.getMaxInstances() && now - lastUp > 30_000L) {
+            Logger.info("[AutoScale] " + groupName + ": scaling UP (" + running + "/" + group.getMaxInstances() + " running, threshold " + group.getAutoScaleThreshold() + "%)");
+            scaleUpCooldown.put(groupName, now);
+            startServer(groupName, 1);
+            return;
+        }
+
+        // --- Scale DOWN ---
+        if (running > Math.max(group.getMinOnline(), 1)) {
+            long lastDown = scaleDownCooldown.getOrDefault(groupName, 0L);
+            if (now - lastDown > 60_000L) {
+                procs.stream().filter(p -> p.getPlayerCount() == 0).findFirst().ifPresent(p -> {
+                    Logger.info("[AutoScale] " + groupName + ": scaling DOWN (stopping idle " + p.getServerName() + ")");
+                    scaleDownCooldown.put(groupName, now);
+                    stopServer(p.getServerName());
+                });
+            }
+        }
     }
 
     public int getPlayerCount(String serverName) {
