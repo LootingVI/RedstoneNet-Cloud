@@ -12,6 +12,8 @@ import net.redstone.cloud.node.web.WebTokenManager;
 import net.redstone.cloud.node.logging.Logger;
 import net.redstone.cloud.api.permission.PermissionGroup;
 import net.redstone.cloud.api.permission.PermissionUser;
+import net.redstone.cloud.node.discord.AuditLogManager;
+import net.redstone.cloud.node.discord.DiscordBot;
 import net.redstone.cloud.api.network.packet.MaintenanceUpdatePacket;
 import net.redstone.cloud.api.network.packet.ServerStatusPacket;
 
@@ -32,6 +34,8 @@ public class CloudNode {
     private SoftwareDownloader softwareDownloader;
     private WebServer webServer;
     private WebTokenManager webTokenManager;
+    private AuditLogManager auditLogManager;
+    private DiscordBot discordBot;
 
     private static CloudNode instance;
     private String host = "127.0.0.1";
@@ -171,6 +175,14 @@ public class CloudNode {
         return webTokenManager;
     }
 
+    public AuditLogManager getAuditLogManager() {
+        return auditLogManager;
+    }
+
+    public DiscordBot getDiscordBot() {
+        return discordBot;
+    }
+
     public String getHost() {
         return host;
     }
@@ -208,6 +220,9 @@ public class CloudNode {
         softwareDownloader = new SoftwareDownloader();
 
         webTokenManager = new WebTokenManager();
+        auditLogManager = new AuditLogManager();
+        discordBot = new DiscordBot();
+        
         webServer = new WebServer();
         webServer.start();
 

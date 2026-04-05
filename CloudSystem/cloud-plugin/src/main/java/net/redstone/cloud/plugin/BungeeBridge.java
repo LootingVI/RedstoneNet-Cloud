@@ -81,7 +81,7 @@ public class BungeeBridge extends Plugin implements Listener {
                 Properties props = new Properties();
                 File wrapperFile = new File("wrapper.properties");
                 if (!wrapperFile.exists()) {
-                    getLogger().severe("[CloudPlugin] KEINE wrapper.properties gefunden!");
+                    getLogger().severe("[CloudPlugin] No wrapper.properties found!");
                     return;
                 }
                 props.load(Files.newInputStream(wrapperFile.toPath()));
