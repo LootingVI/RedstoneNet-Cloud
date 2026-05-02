@@ -1,7 +1,6 @@
 package net.redstone.cloud.plugin;
 
 import net.redstone.cloud.api.network.packet.AuthPacket;
-import net.redstone.cloud.api.network.packet.CloudCommandPacket;
 import net.redstone.cloud.api.network.packet.CloudMessagePacket;
 import net.redstone.cloud.api.network.packet.PermissionUpdatePacket;
 import net.redstone.cloud.api.network.packet.PerformancePacket;
@@ -9,6 +8,7 @@ import net.redstone.cloud.api.network.packet.PlayerActivityPacket;
 import net.redstone.cloud.api.network.packet.PlayerCountPacket;
 import net.redstone.cloud.api.network.packet.ServerStatusPacket;
 import net.redstone.cloud.api.network.packet.SyncConfigPacket;
+import net.redstone.cloud.api.network.packet.api.GlobalPlayerListPacket;
 import net.redstone.cloud.api.permission.PermissionGroup;
 import net.redstone.cloud.api.permission.PermissionUser;
 import org.bukkit.Location;
@@ -55,12 +55,14 @@ public class CloudPlugin extends JavaPlugin implements Listener {
     private String resourcePackUrl = "";
     private byte[] resourcePackHash = new byte[0];
     private boolean resourcePackForced = false;
+    private CloudAPIImpl cloudAPI;
 
     @Override
     public void onEnable() {
         getLogger().info("[CloudPlugin] Cloud-Bridge starting...");
         getServer().getPluginManager().registerEvents(this, this);
         getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
+        getServer().getMessenger().registerOutgoingPluginChannel(this, "minecraft:brand");
 
         loadSigns();
         connectToNode();
@@ -68,22 +70,77 @@ public class CloudPlugin extends JavaPlugin implements Listener {
         if (getCommand("cloud") != null) {
             getCommand("cloud").setExecutor((sender, command, label, args) -> {
                 if (!sender.hasPermission("redstonecloud.admin")) {
-                    sender.sendMessage("§cKeine Rechte.");
+                    sender.sendMessage("§cNo Permissions.");
                     return true;
                 }
                 if (args.length == 0) {
-                    sender.sendMessage("§bCloud §8» §7/cloud <list|start|stop>");
+                    sender.sendMessage("§bCloud §8» §7Commands:");
+                    sender.sendMessage("§7/cloud list §8- §7List all servers");
+                    sender.sendMessage("§7/cloud players §8- §7List all players");
+                    sender.sendMessage("§7/cloud start <group> <count> §8- §7Start servers");
+                    sender.sendMessage("§7/cloud stop <server> §8- §7Stop a server");
+                    sender.sendMessage("§7/cloud send <player> <server> §8- §7Send a player");
+                    sender.sendMessage("§7/cloud maintenance <on|off> §8- §7Toggle maintenance");
                     return true;
                 }
-                String cmdLine = String.join(" ", args);
-                try {
-                    if (out != null) {
-                        out.writeObject(new CloudCommandPacket(sender.getName(), cmdLine));
-                        out.flush();
-                    }
-                } catch (Exception ignored) {
+
+                if (args[0].equalsIgnoreCase("list")) {
+                    sender.sendMessage("§bCloud §8» §7Active Servers:");
+                    serverStatus.values().forEach(status -> {
+                        sender.sendMessage("§8- §e" + status.getServerName() + " §8(§a" + status.getState() + "§8) §7" + status.getPlayerCount() + " Players");
+                    });
+                } else if (args[0].equalsIgnoreCase("players")) {
+                    List<net.redstone.cloud.api.player.CloudPlayer> players = cloudAPI.getOnlinePlayers();
+                    sender.sendMessage("§bCloud §8» §7Online Players (§e" + players.size() + "§7):");
+                    String names = players.stream().map(p -> "§e" + p.getName() + " §8(§7" + p.getGameServer() + "§8)").reduce((a, b) -> a + "§7, " + b).orElse("§cNone");
+                    sender.sendMessage(names);
+                } else if (args[0].equalsIgnoreCase("send") && args.length >= 3) {
+                    cloudAPI.sendPlayer(args[1], args[2]);
+                    sender.sendMessage("§bCloud §8» §aTransfer request for §e" + args[1] + " §asent.");
+                } else if (args[0].equalsIgnoreCase("maintenance") && args.length >= 2) {
+                    String cmd = "maintenance " + args[1];
+                    cloudAPI.dispatchCloudCommand(sender.getName(), cmd);
+                } else {
+                    // Forward other commands to CloudNode
+                    String cmdLine = String.join(" ", args);
+                    cloudAPI.dispatchCloudCommand(sender.getName(), cmdLine);
                 }
                 return true;
+            });
+
+            getCommand("cloud").setTabCompleter((sender, command, alias, args) -> {
+                if (args.length == 1) {
+                    return java.util.Arrays.asList("list", "players", "start", "stop", "send", "maintenance");
+                }
+                if (args.length == 2) {
+                    if (args[0].equalsIgnoreCase("stop")) return new ArrayList<>(serverStatus.keySet());
+                    if (args[0].equalsIgnoreCase("send")) return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
+                }
+                if (args.length == 3 && args[0].equalsIgnoreCase("send")) {
+                    return new ArrayList<>(serverStatus.keySet());
+                }
+                return new ArrayList<>();
+            });
+        }
+
+        if (getCommand("send") != null) {
+            getCommand("send").setExecutor((sender, command, label, args) -> {
+                if (!sender.hasPermission("redstonecloud.admin")) {
+                    sender.sendMessage("§cNo Permissions.");
+                    return true;
+                }
+                if (args.length < 2) {
+                    sender.sendMessage("§bCloud §8» §7/send <player> <server>");
+                    return true;
+                }
+                cloudAPI.sendPlayer(args[0], args[1]);
+                sender.sendMessage("§bCloud §8» §aTransfer request for §e" + args[0] + " §asent.");
+                return true;
+            });
+            getCommand("send").setTabCompleter((sender, command, alias, args) -> {
+                if (args.length == 1) return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
+                if (args.length == 2) return new ArrayList<>(serverStatus.keySet());
+                return new ArrayList<>();
             });
         }
     }
@@ -132,7 +189,7 @@ public class CloudPlugin extends JavaPlugin implements Listener {
                     resourcePackHash = new byte[20];
                     for (int i = 0; i < 40; i += 2) {
                         resourcePackHash[i / 2] = (byte) ((Character.digit(hashHex.charAt(i), 16) << 4)
-                                + Character.digit(hashHex.charAt(i+1), 16));
+                                + Character.digit(hashHex.charAt(i + 1), 16));
                     }
                 }
                 resourcePackForced = Boolean.parseBoolean(props.getProperty("cloud.resourcePackForced", "false"));
@@ -146,6 +203,9 @@ public class CloudPlugin extends JavaPlugin implements Listener {
                 final String finalServerName = serverName;
                 out.writeObject(new AuthPacket(serverName, authKey, serverPort, isProxy));
                 out.flush();
+
+                cloudAPI = new CloudAPIImpl(out, serverName);
+                getLogger().info("[CloudPlugin] CloudAPI initialized! Use CloudAPI.getInstance() in your plugins.");
 
                 getServer().getScheduler().runTaskTimerAsynchronously(this, () -> {
                     try {
@@ -199,7 +259,8 @@ public class CloudPlugin extends JavaPlugin implements Listener {
                                 PermissionUpdatePacket pkt = (PermissionUpdatePacket) obj;
                                 cachedGroups = pkt.getGroups();
                                 cachedUsers = pkt.getUsers();
-                                getLogger().info("[CloudPlugin] Permissions updated (" + cachedGroups.size() + " groups).");
+                                getLogger().info(
+                                        "[CloudPlugin] Permissions updated (" + cachedGroups.size() + " groups).");
                                 getServer().getScheduler().runTask(CloudPlugin.this, () -> {
                                     for (Player player : getServer().getOnlinePlayers()) {
                                         setupPermissions(player);
@@ -208,6 +269,7 @@ public class CloudPlugin extends JavaPlugin implements Listener {
                             } else if (obj instanceof ServerStatusPacket) {
                                 ServerStatusPacket pkt = (ServerStatusPacket) obj;
                                 serverStatus.put(pkt.getServerName(), pkt);
+                                if (cloudAPI != null) cloudAPI.updateServerStatus(pkt);
                                 getServer().getScheduler().runTask(CloudPlugin.this, this::updateSigns);
                             } else if (obj instanceof SyncConfigPacket) {
                                 settings = ((SyncConfigPacket) obj).getSettings();
@@ -219,6 +281,10 @@ public class CloudPlugin extends JavaPlugin implements Listener {
                                         setupPermissions(player);
                                     }
                                 });
+                            } else if (obj instanceof GlobalPlayerListPacket) {
+                                GlobalPlayerListPacket gpl = (GlobalPlayerListPacket) obj;
+                                if (cloudAPI != null)
+                                    cloudAPI.updatePlayerList(gpl.getPlayers());
                             }
                         }
                     } catch (Exception ignored) {
@@ -226,7 +292,9 @@ public class CloudPlugin extends JavaPlugin implements Listener {
                 }, "Cloud-Receiver").start();
 
             } catch (Exception e) {
-                getLogger().severe("[CloudPlugin] Connection error: " + e.getMessage());
+                getLogger().severe("[CloudPlugin] Connection error: " + e.getMessage() + " – retrying in 5s...");
+                try { Thread.sleep(5000); } catch (InterruptedException ignored) {}
+                connectToNode();
             }
         });
     }
@@ -328,7 +396,8 @@ public class CloudPlugin extends JavaPlugin implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         try {
             if (out != null) {
-                out.writeObject(new PlayerActivityPacket(event.getPlayer().getName(), true));
+                out.writeObject(
+                        new PlayerActivityPacket(event.getPlayer().getName(), event.getPlayer().getUniqueId(), true));
                 out.flush();
             }
         } catch (Exception ignored) {
@@ -339,21 +408,34 @@ public class CloudPlugin extends JavaPlugin implements Listener {
         if (resourcePackUrl != null && !resourcePackUrl.isEmpty()) {
             getServer().getScheduler().runTaskLater(this, () -> {
                 try {
-                    event.getPlayer().setResourcePack(resourcePackUrl, resourcePackHash, "§ePlease accept the resource pack for this server mode!", resourcePackForced);
+                    event.getPlayer().setResourcePack(resourcePackUrl, resourcePackHash,
+                            "§ePlease accept the resource pack for this server mode!", resourcePackForced);
                 } catch (NoSuchMethodError e) {
                     try {
                         event.getPlayer().setResourcePack(resourcePackUrl, resourcePackHash);
-                    } catch (Exception ex) {}
+                    } catch (Exception ex) {
+                    }
                 }
             }, 20L); // 1 sec delay to ensure login is complete
         }
+
+        // Set F3 Brand
+        getServer().getScheduler().runTaskLater(this, () -> {
+            try {
+                ByteArrayOutputStream b = new ByteArrayOutputStream();
+                DataOutputStream dataOut = new DataOutputStream(b);
+                dataOut.writeUTF("§3RedstoneNet §bCloud");
+                event.getPlayer().sendPluginMessage(this, "minecraft:brand", b.toByteArray());
+            } catch (Exception ignored) {}
+        }, 10L);
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         try {
             if (out != null) {
-                out.writeObject(new PlayerActivityPacket(event.getPlayer().getName(), false));
+                out.writeObject(
+                        new PlayerActivityPacket(event.getPlayer().getName(), event.getPlayer().getUniqueId(), false));
                 out.flush();
             }
         } catch (Exception ignored) {

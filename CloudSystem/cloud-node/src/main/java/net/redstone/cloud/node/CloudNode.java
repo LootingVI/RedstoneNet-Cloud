@@ -14,12 +14,14 @@ import net.redstone.cloud.api.permission.PermissionGroup;
 import net.redstone.cloud.api.permission.PermissionUser;
 import net.redstone.cloud.node.discord.AuditLogManager;
 import net.redstone.cloud.node.discord.DiscordBot;
+import net.redstone.cloud.api.event.node.CloudNodeStartEvent;
 import net.redstone.cloud.api.network.packet.MaintenanceUpdatePacket;
 import net.redstone.cloud.api.network.packet.ServerStatusPacket;
 import net.redstone.cloud.node.plugin.CloudPluginManager;
 import net.redstone.cloud.node.command.CommandManager;
 import net.redstone.cloud.node.command.ConsoleCommandSender;
 import net.redstone.cloud.node.event.EventManager;
+import net.redstone.cloud.node.player.PlayerManager;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -43,6 +45,7 @@ public class CloudNode {
     private CloudPluginManager pluginManager;
     private CommandManager commandManager;
     private EventManager eventManager;
+    private PlayerManager playerManager;
 
     private static CloudNode instance;
     private String host = "127.0.0.1";
@@ -59,7 +62,7 @@ public class CloudNode {
     public void setMaintenance(boolean maintenance) {
         this.maintenance = maintenance;
         if (netServer != null) {
-        netServer.broadcastPacket(new MaintenanceUpdatePacket(maintenance));
+            netServer.broadcastPacket(new MaintenanceUpdatePacket(maintenance));
         }
         Logger
                 .info("Maintenance mode: " + (maintenance ? "ENABLED" : "DISABLED"));
@@ -105,26 +108,27 @@ public class CloudNode {
                 }
                 boolean added = false;
                 String[][] defaults = {
-                    {"motd.enabled", "true"},
-                    {"tablist.enabled", "true"},
-                    {"nametags.enabled", "true"},
-                    {"tablist.header", "&3&lRedstoneNet &8- &bCloud\\n&7You are playing on: &e%server%"},
-                    {"tablist.footer", "&7Shop: &bshop.redstone.net\\n&e%online% &7Players online"},
-                    {"msg.maintenanceKick", "&cThe network is currently in maintenance mode!\\n&7Please come back later."},
-                    {"msg.fallbackKick", "&cYou were sent to the lobby: &7%reason%"},
-                    {"sign.line1.online", "&b[Cloud]"},
-                    {"sign.line2.online", "&7%server%"},
-                    {"sign.line3.online", "&aOnline"},
-                    {"sign.line4.online", "&8%online% Players"},
-                    {"sign.line1.offline", "&b[Cloud]"},
-                    {"sign.line2.offline", "&7%server%"},
-                    {"sign.line3.offline", "&cOffline"},
-                    {"sign.line4.offline", "&8-"},
-                    {"motd.line1", "&3&lRedstoneNet &8| &bCloudSystem"},
-                    {"motd.line2", "&7We are &aONLINE&7! Come and play with us."},
-                    {"motd.maintenance.line1", "&3&lRedstoneNet &8| &bCloudSystem &c[Maintenance]"},
-                    {"motd.maintenance.line2", "&cMaintenance &8| &7We'll be back soon!"},
-                    {"backup.static.enabled", "false"},
+                        { "motd.enabled", "true" },
+                        { "tablist.enabled", "true" },
+                        { "nametags.enabled", "true" },
+                        { "tablist.header", "&3&lRedstoneNet &8- &bCloud\\n&7You are playing on: &e%server%" },
+                        { "tablist.footer", "&7Shop: &bshop.redstone.net\\n&e%online% &7Players online" },
+                        { "msg.maintenanceKick",
+                                "&cThe network is currently in maintenance mode!\\n&7Please come back later." },
+                        { "msg.fallbackKick", "&cYou were sent to the lobby: &7%reason%" },
+                        { "sign.line1.online", "&b[Cloud]" },
+                        { "sign.line2.online", "&7%server%" },
+                        { "sign.line3.online", "&aOnline" },
+                        { "sign.line4.online", "&8%online% Players" },
+                        { "sign.line1.offline", "&b[Cloud]" },
+                        { "sign.line2.offline", "&7%server%" },
+                        { "sign.line3.offline", "&cOffline" },
+                        { "sign.line4.offline", "&8-" },
+                        { "motd.line1", "&3&lRedstoneNet &8| &bCloudSystem" },
+                        { "motd.line2", "&7We are &aONLINE&7! Come and play with us." },
+                        { "motd.maintenance.line1", "&3&lRedstoneNet &8| &bCloudSystem &c[Maintenance]" },
+                        { "motd.maintenance.line2", "&cMaintenance &8| &7We'll be back soon!" },
+                        { "backup.static.enabled", "false" },
                 };
                 for (String[] def : defaults) {
                     if (!props.containsKey(def[0])) {
@@ -202,6 +206,10 @@ public class CloudNode {
         return eventManager;
     }
 
+    public PlayerManager getPlayerManager() {
+        return playerManager;
+    }
+
     public String getHost() {
         return host;
     }
@@ -225,7 +233,7 @@ public class CloudNode {
 
         loadConfig();
         loadNetworkSettings();
-        
+
         Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
 
         netServer = new NetServer(this.port);
@@ -241,9 +249,10 @@ public class CloudNode {
         webTokenManager = new WebTokenManager();
         auditLogManager = new AuditLogManager();
         discordBot = new DiscordBot();
-        
+
         commandManager = new CommandManager();
         eventManager = new EventManager();
+        playerManager = new PlayerManager();
 
         pluginManager = new CloudPluginManager();
         pluginManager.loadPlugins();
@@ -274,13 +283,16 @@ public class CloudNode {
                                     process.getPlayerCount(),
                                     -1));
                         }
+                        // Sync global player list to all connected servers
+                        netServer.broadcastPacket(new net.redstone.cloud.api.network.packet.api.GlobalPlayerListPacket(
+                                playerManager.getOnlinePlayers()));
                     }
                 } catch (InterruptedException ignored) {
                 }
             }
         }, "CloudStatus-Thread").start();
 
-        eventManager.callEvent(new net.redstone.cloud.api.event.node.CloudNodeStartEvent("1.0", port));
+        eventManager.callEvent(new CloudNodeStartEvent("1.0", port));
 
         Logger.info("-------------------------------------------------");
         Logger
@@ -345,9 +357,9 @@ public class CloudNode {
     public void dispatchCommand(String line) {
         if (line == null || line.trim().isEmpty())
             return;
-            
+
         eventManager.callEvent(new net.redstone.cloud.api.event.node.CloudConsoleCommandExecuteEvent(line));
-        
+
         if (commandManager.dispatchCommand(new ConsoleCommandSender(), line)) {
             return;
         }
@@ -435,12 +447,15 @@ public class CloudNode {
                         boolean bedrockSupport = Boolean.parseBoolean(args[6]);
                         int startPort = args.length >= 8 ? Integer.parseInt(args[7]) : 0;
                         int minOnline = args.length == 9 ? Integer.parseInt(args[8]) : (isStatic ? 1 : 0);
-                        groupManager.createGroup(name, memory, isStatic, isProxy, software, startPort, minOnline, bedrockSupport);
+                        groupManager.createGroup(name, memory, isStatic, isProxy, software, startPort, minOnline,
+                                bedrockSupport);
                     } catch (Exception e) {
-                        Logger.error("Usage: create <Name> <MB> <isStatic> <isProxy> <JAR> <BedrockSupport:true/false> [Port] [minOnline]");
+                        Logger.error(
+                                "Usage: create <Name> <MB> <isStatic> <isProxy> <JAR> <BedrockSupport:true/false> [Port] [minOnline]");
                     }
                 } else {
-                    Logger.info("Usage:   create <Name> <MB> <isStatic> <isProxy> <JAR> <BedrockSupport:true/false> [Port] [minOnline]");
+                    Logger.info(
+                            "Usage:   create <Name> <MB> <isStatic> <isProxy> <JAR> <BedrockSupport:true/false> [Port] [minOnline]");
                     Logger.info("Example: create Lobby 1024 true false paper.jar true 25566 1");
                     Logger.info("Example: create Proxy 512 false true velocity.jar false 25565 1");
                     Logger.info("Tip:     Use port 0 for dynamic/random ports.");

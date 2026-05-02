@@ -186,6 +186,42 @@ public class MyListener implements Listener {
 - **Server Events:** `CloudServerStartEvent`, `CloudServerStopEvent`, `CloudServerCrashEvent`
 - **Group Events:** `CloudGroupCreateEvent`, `CloudGroupDeleteEvent`
 - **Network / API Events:** `CloudSoftwareDownloadEvent`, `CloudWebTokenCreateEvent`, `CloudPacketReceiveEvent`
+---
+
+### 🌐 CloudAPI – In-Game API Bridge
+
+The **CloudAPI** allows Spigot/Paper and Velocity/BungeeCord plugins to interact with the Cloud directly from within your game servers. It is automatically initialized by the `cloud-plugin` bridge module.
+
+**Access the API from any server plugin:**
+```java
+import net.redstone.cloud.api.CloudAPI;
+import net.redstone.cloud.api.player.CloudPlayer;
+
+// Start 2 new Bedwars servers
+CloudAPI.getInstance().startServer("Bedwars", 2);
+
+// Stop a specific server
+CloudAPI.getInstance().stopServer("Bedwars-3");
+
+// Get all online players across the entire network
+List<CloudPlayer> allPlayers = CloudAPI.getInstance().getOnlinePlayers();
+
+// Find a specific player by name
+CloudPlayer player = CloudAPI.getInstance().getPlayer("Notch");
+if (player != null) {
+    System.out.println(player.getName() + " is on " + player.getGameServer());
+}
+
+// Execute a cloud command remotely
+CloudAPI.getInstance().dispatchCloudCommand("Console", "maintenance true");
+```
+
+#### CloudPlayer Object
+The `CloudPlayer` object tracks a player's position across the entire network:
+- `getUuid()` – The player's Minecraft UUID
+- `getName()` – The player's in-game name
+- `getProxyServer()` – Which proxy the player is connected through
+- `getGameServer()` – Which game server the player is currently on
 
 ---
 

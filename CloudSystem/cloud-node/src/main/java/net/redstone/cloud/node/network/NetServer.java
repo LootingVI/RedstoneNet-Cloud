@@ -12,6 +12,11 @@ import net.redstone.cloud.api.network.packet.UnregisterServerPacket;
 import net.redstone.cloud.api.network.packet.PerformancePacket;
 import net.redstone.cloud.api.network.packet.MaintenanceUpdatePacket;
 import net.redstone.cloud.api.network.packet.SyncConfigPacket;
+import net.redstone.cloud.api.network.packet.api.StartServerPacket;
+import net.redstone.cloud.api.network.packet.api.StopServerPacket;
+import net.redstone.cloud.api.network.packet.api.SendPlayerPacket;
+import net.redstone.cloud.api.network.packet.api.PrivateMessagePacket;
+import net.redstone.cloud.api.player.CloudPlayer;
 import net.redstone.cloud.node.CloudNode;
 import net.redstone.cloud.node.logging.Logger;
 import net.redstone.cloud.node.process.CloudServerProcess;
@@ -181,8 +186,14 @@ public class NetServer {
             PlayerActivityPacket act = (PlayerActivityPacket) packet;
             if (act.isJoin()) {
                 Logger.info("» [PlayerLog] " + act.getPlayerName() + " joined " + serverName + ".");
+                CloudPlayer cp = new CloudPlayer(act.getUuid(), act.getPlayerName(), serverName);
+                cp.setGameServer(serverName);
+                CloudNode.getInstance().getPlayerManager().addPlayer(cp);
             } else {
                 Logger.info("« [PlayerLog] " + act.getPlayerName() + " left " + serverName + ".");
+                if (act.getUuid() != null) {
+                    CloudNode.getInstance().getPlayerManager().removePlayer(act.getUuid());
+                }
             }
         } else if (packet instanceof PlayerCountPacket) {
             PlayerCountPacket pcp = (PlayerCountPacket) packet;
@@ -197,6 +208,32 @@ public class NetServer {
                 if (perf.getTps() < 15.0) {
                     Logger.warn("⚠️ [Anti-Lag] " + perf.getServerName() + " is lagging severely! (TPS: " + String.format("%.1f", perf.getTps()) + ")");
                 }
+            }
+        } else if (packet instanceof StartServerPacket) {
+            StartServerPacket ssp = (StartServerPacket) packet;
+            Logger.info("[API] Received StartServer request: " + ssp.getGroupName() + " x" + ssp.getCount());
+            CloudNode.getInstance().getServerManager().startServer(ssp.getGroupName(), ssp.getCount());
+        } else if (packet instanceof StopServerPacket) {
+            StopServerPacket stp = (StopServerPacket) packet;
+            Logger.info("[API] Received StopServer request: " + stp.getServerName());
+            CloudNode.getInstance().getServerManager().stopServer(stp.getServerName());
+        } else if (packet instanceof SendPlayerPacket) {
+            SendPlayerPacket sp = (SendPlayerPacket) packet;
+            Logger.info("[API] SendPlayer: " + sp.getPlayerName() + " -> " + sp.getTargetServer());
+            // Forward to all proxies so they can connect the player
+            for (ObjectOutputStream pOut : proxies) {
+                try {
+                    pOut.writeObject(sp);
+                    pOut.flush();
+                } catch (Exception ignored) {}
+            }
+        } else if (packet instanceof PrivateMessagePacket) {
+            PrivateMessagePacket pm = (PrivateMessagePacket) packet;
+            for (ObjectOutputStream pOut : proxies) {
+                try {
+                    pOut.writeObject(pm);
+                    pOut.flush();
+                } catch (Exception ignored) {}
             }
         }
         return null;

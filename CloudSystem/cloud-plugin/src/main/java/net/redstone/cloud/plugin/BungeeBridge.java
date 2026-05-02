@@ -1,6 +1,5 @@
 package net.redstone.cloud.plugin;
 
-import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.CommandSender;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.config.ServerInfo;
@@ -13,7 +12,6 @@ import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.event.EventHandler;
 import net.redstone.cloud.api.network.packet.AuthPacket;
-import net.redstone.cloud.api.network.packet.CloudCommandPacket;
 import net.redstone.cloud.api.network.packet.CloudMessagePacket;
 import net.redstone.cloud.api.network.packet.PermissionUpdatePacket;
 import net.redstone.cloud.api.network.packet.PlayerActivityPacket;
@@ -22,8 +20,12 @@ import net.redstone.cloud.api.network.packet.UnregisterServerPacket;
 import net.redstone.cloud.api.network.packet.MaintenanceUpdatePacket;
 import net.redstone.cloud.api.network.packet.SyncConfigPacket;
 import net.redstone.cloud.api.network.packet.ServerStatusPacket;
+import net.redstone.cloud.api.network.packet.api.GlobalPlayerListPacket;
+import net.redstone.cloud.api.network.packet.api.SendPlayerPacket;
+import net.redstone.cloud.api.network.packet.api.PrivateMessagePacket;
 import net.redstone.cloud.api.permission.PermissionGroup;
 import net.redstone.cloud.api.permission.PermissionUser;
+import net.md_5.bungee.api.plugin.TabExecutor;
 
 import java.io.File;
 import java.io.ObjectInputStream;
@@ -48,31 +50,96 @@ public class BungeeBridge extends Plugin implements Listener {
     private String fallbackKickMessage = "§cYou were sent to the lobby: §7%reason%";
     private final java.util.Map<String, ServerStatusPacket> serverStatus = new java.util.HashMap<>();
     private java.util.Map<String, String> settings = new java.util.HashMap<>();
+    private final java.util.Map<String, String> replyMap = new java.util.HashMap<>();
+    private CloudAPIImpl cloudAPI;
 
     @Override
     public void onEnable() {
         getLogger().info("[CloudPlugin] Cloud-Bridge (BungeeCord) starting...");
         getProxy().getPluginManager().registerListener(this, this);
         getProxy().getPluginManager().registerCommand(this, new HubCommand());
-        getProxy().getPluginManager().registerCommand(this, new Command("cloud", "redstonecloud.admin") {
-            @Override
-            public void execute(CommandSender sender, String[] args) {
-                if (args.length == 0) {
-                    sender.sendMessage(new TextComponent(ChatColor.AQUA + "Cloud " + ChatColor.DARK_GRAY + "» "
-                            + ChatColor.GRAY + "/cloud <list|start|stop>"));
-                    return;
-                }
-                String cmdLine = String.join(" ", args);
-                try {
-                    if (out != null) {
-                        out.writeObject(new CloudCommandPacket(sender.getName(), cmdLine));
-                        out.flush();
-                    }
-                } catch (Exception ignored) {
-                }
-            }
-        });
+        getProxy().getPluginManager().registerCommand(this, new CloudCommand());
+        getProxy().getPluginManager().registerCommand(this, new SendCommand());
+        getProxy().getPluginManager().registerCommand(this, new MsgCommand());
+        getProxy().getPluginManager().registerCommand(this, new ReplyCommand());
         connectToNode();
+    }
+
+    private class CloudCommand extends Command implements TabExecutor {
+        public CloudCommand() {
+            super("cloud", "redstonecloud.admin");
+        }
+
+        @Override
+        public void execute(CommandSender sender, String[] args) {
+            if (args.length == 0) {
+                sender.sendMessage(new TextComponent("§bCloud §8» §7Commands:"));
+                sender.sendMessage(new TextComponent("§7/cloud list §8- §7List all servers"));
+                sender.sendMessage(new TextComponent("§7/cloud players §8- §7List all players"));
+                sender.sendMessage(new TextComponent("§7/cloud start <group> <count> §8- §7Start servers"));
+                sender.sendMessage(new TextComponent("§7/cloud stop <server> §8- §7Stop a server"));
+                sender.sendMessage(new TextComponent("§7/cloud send <player> <server> §8- §7Send a player"));
+                sender.sendMessage(new TextComponent("§7/cloud maintenance <on|off> §8- §7Toggle maintenance"));
+                return;
+            }
+
+            if (args[0].equalsIgnoreCase("list")) {
+                sender.sendMessage(new TextComponent("§bCloud §8» §7Active Servers:"));
+                serverStatus.values().forEach(status -> {
+                    sender.sendMessage(new TextComponent("§8- §e" + status.getServerName() + " §8(§a" + status.getState() + "§8) §7" + status.getPlayerCount() + " Players"));
+                });
+            } else if (args[0].equalsIgnoreCase("players")) {
+                List<net.redstone.cloud.api.player.CloudPlayer> players = cloudAPI.getOnlinePlayers();
+                sender.sendMessage(new TextComponent("§bCloud §8» §7Online Players (§e" + players.size() + "§7):"));
+                String names = players.stream().map(p -> "§e" + p.getName() + " §8(§7" + p.getGameServer() + "§8)").reduce((a, b) -> a + "§7, " + b).orElse("§cNone");
+                sender.sendMessage(new TextComponent(names));
+            } else if (args[0].equalsIgnoreCase("send") && args.length >= 3) {
+                cloudAPI.sendPlayer(args[1], args[2]);
+                sender.sendMessage(new TextComponent("§bCloud §8» §aTransfer request for §e" + args[1] + " §asent."));
+            } else if (args[0].equalsIgnoreCase("maintenance") && args.length >= 2) {
+                cloudAPI.dispatchCloudCommand(sender.getName(), "maintenance " + args[1]);
+            } else {
+                cloudAPI.dispatchCloudCommand(sender.getName(), String.join(" ", args));
+            }
+        }
+
+        @Override
+        public Iterable<String> onTabComplete(CommandSender sender, String[] args) {
+            if (args.length == 1) {
+                return java.util.Arrays.asList("list", "players", "start", "stop", "send", "maintenance");
+            }
+            if (args.length == 2) {
+                if (args[0].equalsIgnoreCase("stop")) return new ArrayList<>(serverStatus.keySet());
+                if (args[0].equalsIgnoreCase("send")) return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
+            }
+            if (args.length == 3 && args[0].equalsIgnoreCase("send")) {
+                return new ArrayList<>(serverStatus.keySet());
+            }
+            return new ArrayList<>();
+        }
+    }
+
+    private class SendCommand extends Command implements TabExecutor {
+        public SendCommand() {
+            super("send", "redstonecloud.admin");
+        }
+
+        @Override
+        public void execute(CommandSender sender, String[] args) {
+            if (args.length < 2) {
+                sender.sendMessage(new TextComponent("§bCloud §8» §7/send <player> <server>"));
+                return;
+            }
+            cloudAPI.sendPlayer(args[0], args[1]);
+            sender.sendMessage(new TextComponent("§bCloud §8» §aTransfer request for §e" + args[0] + " §asent."));
+        }
+
+        @Override
+        public Iterable<String> onTabComplete(CommandSender sender, String[] args) {
+            if (args.length == 1) return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
+            if (args.length == 2) return new ArrayList<>(serverStatus.keySet());
+            return new ArrayList<>();
+        }
     }
 
     private void connectToNode() {
@@ -101,6 +168,9 @@ public class BungeeBridge extends Plugin implements Listener {
 
                 out.writeObject(new AuthPacket(serverName, authKey, serverPort, isProxy));
                 out.flush();
+
+                cloudAPI = new CloudAPIImpl(out, serverName);
+                getLogger().info("[CloudPlugin] CloudAPI initialized! Use CloudAPI.getInstance() in your plugins.");
 
                 new Thread(() -> {
                     try {
@@ -139,6 +209,7 @@ public class BungeeBridge extends Plugin implements Listener {
                                 getLogger().info("[CloudPlugin] Permissions updated (" + cachedGroups.size() + " groups).");
                             } else if (obj instanceof MaintenanceUpdatePacket) {
                                 maintenance = ((MaintenanceUpdatePacket) obj).isMaintenance();
+                                if (cloudAPI != null) cloudAPI.setMaintenance(maintenance);
                                 getLogger().info("[CloudPlugin] Maintenance mode updated: " + maintenance);
                             } else if (obj instanceof SyncConfigPacket) {
                                 settings = ((SyncConfigPacket) obj).getSettings();
@@ -149,6 +220,29 @@ public class BungeeBridge extends Plugin implements Listener {
                             } else if (obj instanceof ServerStatusPacket) {
                                 ServerStatusPacket pkt = (ServerStatusPacket) obj;
                                 serverStatus.put(pkt.getServerName(), pkt);
+                                if (cloudAPI != null) cloudAPI.updateServerStatus(pkt);
+                            } else if (obj instanceof GlobalPlayerListPacket) {
+                                GlobalPlayerListPacket gpl = (GlobalPlayerListPacket) obj;
+                                if (cloudAPI != null) cloudAPI.updatePlayerList(gpl.getPlayers());
+                            } else if (obj instanceof SendPlayerPacket) {
+                                SendPlayerPacket sp = (SendPlayerPacket) obj;
+                                ProxiedPlayer target = getProxy().getPlayer(sp.getPlayerName());
+                                ServerInfo targetServer = getProxy().getServerInfo(sp.getTargetServer());
+                                if (target != null && targetServer != null) {
+                                    target.connect(targetServer);
+                                    target.sendMessage(new TextComponent("§aSending you to §e" + sp.getTargetServer() + "§a..."));
+                                }
+                            } else if (obj instanceof PrivateMessagePacket) {
+                                PrivateMessagePacket pm = (PrivateMessagePacket) obj;
+                                ProxiedPlayer receiver = getProxy().getPlayer(pm.getReceiver());
+                                if (receiver != null) {
+                                    receiver.sendMessage(new TextComponent("§bFrom §7" + pm.getSender() + " §8» §f" + pm.getMessage()));
+                                    replyMap.put(pm.getReceiver(), pm.getSender());
+                                }
+                                ProxiedPlayer sender = getProxy().getPlayer(pm.getSender());
+                                if (sender != null) {
+                                    sender.sendMessage(new TextComponent("§bTo §7" + pm.getReceiver() + " §8» §f" + pm.getMessage()));
+                                }
                             }
                         }
                     } catch (Exception e) {
@@ -157,7 +251,9 @@ public class BungeeBridge extends Plugin implements Listener {
                 }, "Cloud-Receiver").start();
 
             } catch (Exception e) {
-                getLogger().severe("[CloudPlugin] Connection error: " + e.getMessage());
+                getLogger().severe("[CloudPlugin] Connection error: " + e.getMessage() + " – retrying in 5s...");
+                try { Thread.sleep(5000); } catch (InterruptedException ignored) {}
+                connectToNode();
             }
         });
     }
@@ -177,7 +273,7 @@ public class BungeeBridge extends Plugin implements Listener {
     public void onPlayerJoin(PostLoginEvent event) {
         try {
             if (out != null) {
-                out.writeObject(new PlayerActivityPacket(event.getPlayer().getName(), true));
+                out.writeObject(new PlayerActivityPacket(event.getPlayer().getName(), event.getPlayer().getUniqueId(), true));
                 out.flush();
             }
         } catch (Exception ignored) {
@@ -188,7 +284,7 @@ public class BungeeBridge extends Plugin implements Listener {
     public void onPlayerQuit(PlayerDisconnectEvent event) {
         try {
             if (out != null) {
-                out.writeObject(new PlayerActivityPacket(event.getPlayer().getName(), false));
+                out.writeObject(new PlayerActivityPacket(event.getPlayer().getName(), event.getPlayer().getUniqueId(), false));
                 out.flush();
             }
         } catch (Exception ignored) {
@@ -337,5 +433,62 @@ public class BungeeBridge extends Plugin implements Listener {
                 connectToBestLobby((ProxiedPlayer) sender);
             }
         }
+    }
+
+    private class MsgCommand extends Command implements TabExecutor {
+        public MsgCommand() {
+            super("msg", null, "w", "tell", "whisper");
+        }
+
+        @Override
+        public void execute(CommandSender sender, String[] args) {
+            if (!(sender instanceof ProxiedPlayer)) return;
+            ProxiedPlayer p = (ProxiedPlayer) sender;
+            if (args.length < 2) {
+                p.sendMessage(new TextComponent("§bCloud §8» §7/msg <player> <message>"));
+                return;
+            }
+            String target = args[0];
+            String message = String.join(" ", java.util.Arrays.copyOfRange(args, 1, args.length));
+            sendPrivateMessage(p.getName(), target, message);
+        }
+
+        @Override
+        public Iterable<String> onTabComplete(CommandSender sender, String[] args) {
+            if (args.length == 1) return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
+            return new ArrayList<>();
+        }
+    }
+
+    private class ReplyCommand extends Command {
+        public ReplyCommand() {
+            super("reply", null, "r");
+        }
+
+        @Override
+        public void execute(CommandSender sender, String[] args) {
+            if (!(sender instanceof ProxiedPlayer)) return;
+            ProxiedPlayer p = (ProxiedPlayer) sender;
+            if (args.length < 1) {
+                p.sendMessage(new TextComponent("§bCloud §8» §7/r <message>"));
+                return;
+            }
+            String target = replyMap.get(p.getName());
+            if (target == null) {
+                p.sendMessage(new TextComponent("§cYou have nobody to reply to."));
+                return;
+            }
+            String message = String.join(" ", args);
+            sendPrivateMessage(p.getName(), target, message);
+        }
+    }
+
+    private void sendPrivateMessage(String sender, String receiver, String message) {
+        try {
+            if (out != null) {
+                out.writeObject(new PrivateMessagePacket(sender, receiver, message));
+                out.flush();
+            }
+        } catch (Exception ignored) {}
     }
 }

@@ -16,7 +16,6 @@ import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
 import net.kyori.adventure.text.Component;
 import net.redstone.cloud.api.network.packet.AuthPacket;
-import net.redstone.cloud.api.network.packet.CloudCommandPacket;
 import net.redstone.cloud.api.network.packet.CloudMessagePacket;
 import net.redstone.cloud.api.network.packet.PermissionUpdatePacket;
 import net.redstone.cloud.api.network.packet.PlayerActivityPacket;
@@ -27,6 +26,9 @@ import net.redstone.cloud.api.network.packet.SyncConfigPacket;
 import net.redstone.cloud.api.network.packet.ServerStatusPacket;
 import net.redstone.cloud.api.permission.PermissionGroup;
 import net.redstone.cloud.api.permission.PermissionUser;
+import net.redstone.cloud.api.network.packet.api.GlobalPlayerListPacket;
+import net.redstone.cloud.api.network.packet.api.SendPlayerPacket;
+import net.redstone.cloud.api.network.packet.api.PrivateMessagePacket;
 import org.slf4j.Logger;
 import com.velocitypowered.api.event.player.KickedFromServerEvent;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
@@ -58,6 +60,8 @@ public class VelocityBridge {
     private String fallbackKickMessage = "§cYou were sent to the lobby: §7%reason%";
     private final java.util.Map<String, ServerStatusPacket> serverStatus = new java.util.HashMap<>();
     private java.util.Map<String, String> settings = new java.util.HashMap<>();
+    private final java.util.Map<String, String> replyMap = new java.util.HashMap<>();
+    private CloudAPIImpl cloudAPI;
 
     @Inject
     public VelocityBridge(ProxyServer server, Logger logger) {
@@ -72,25 +76,138 @@ public class VelocityBridge {
 
         server.getCommandManager().register(
                 server.getCommandManager().metaBuilder("cloud").plugin(this).build(),
-                (SimpleCommand) invocation -> {
-                    if (!invocation.source().hasPermission("redstonecloud.admin")) {
-                        invocation.source().sendMessage(Component.text("§cKeine Rechte."));
-                        return;
-                    }
-                    if (invocation.arguments().length == 0) {
-                        invocation.source().sendMessage(Component.text("§bCloud §8» §7/cloud <list|start|stop>"));
-                        return;
-                    }
-                    String cmdLine = String.join(" ", invocation.arguments());
-                    String senderName = (invocation.source() instanceof Player)
-                            ? ((Player) invocation.source()).getUsername()
-                            : "Console";
-                    try {
-                        if (out != null) {
-                            out.writeObject(new CloudCommandPacket(senderName, cmdLine));
-                            out.flush();
+                new SimpleCommand() {
+                    @Override
+                    public void execute(Invocation invocation) {
+                        if (!invocation.source().hasPermission("redstonecloud.admin")) {
+                            invocation.source().sendMessage(Component.text("§cNo Permissions."));
+                            return;
                         }
-                    } catch (Exception ignored) {
+                        String[] args = invocation.arguments();
+                        if (args.length == 0) {
+                            invocation.source().sendMessage(Component.text("§bCloud §8» §7Commands:"));
+                            invocation.source().sendMessage(Component.text("§7/cloud list §8- §7List all servers"));
+                            invocation.source().sendMessage(Component.text("§7/cloud players §8- §7List all players"));
+                            invocation.source().sendMessage(Component.text("§7/cloud start <group> <count> §8- §7Start servers"));
+                            invocation.source().sendMessage(Component.text("§7/cloud stop <server> §8- §7Stop a server"));
+                            invocation.source().sendMessage(Component.text("§7/cloud send <player> <server> §8- §7Send a player"));
+                            invocation.source().sendMessage(Component.text("§7/cloud maintenance <on|off> §8- §7Toggle maintenance"));
+                            return;
+                        }
+
+                        String senderName = (invocation.source() instanceof Player)
+                                ? ((Player) invocation.source()).getUsername()
+                                : "Console";
+
+                        if (args[0].equalsIgnoreCase("list")) {
+                            invocation.source().sendMessage(Component.text("§bCloud §8» §7Active Servers:"));
+                            serverStatus.values().forEach(status -> {
+                                invocation.source().sendMessage(Component.text("§8- §e" + status.getServerName() + " §8(§a" + status.getState() + "§8) §7" + status.getPlayerCount() + " Players"));
+                            });
+                        } else if (args[0].equalsIgnoreCase("players")) {
+                            List<net.redstone.cloud.api.player.CloudPlayer> players = cloudAPI.getOnlinePlayers();
+                            invocation.source().sendMessage(Component.text("§bCloud §8» §7Online Players (§e" + players.size() + "§7):"));
+                            String names = players.stream().map(p -> "§e" + p.getName() + " §8(§7" + p.getGameServer() + "§8)").reduce((a, b) -> a + "§7, " + b).orElse("§cNone");
+                            invocation.source().sendMessage(Component.text(names));
+                        } else if (args[0].equalsIgnoreCase("send") && args.length >= 3) {
+                            cloudAPI.sendPlayer(args[1], args[2]);
+                            invocation.source().sendMessage(Component.text("§bCloud §8» §aTransfer request for §e" + args[1] + " §asent."));
+                        } else if (args[0].equalsIgnoreCase("maintenance") && args.length >= 2) {
+                            cloudAPI.dispatchCloudCommand(senderName, "maintenance " + args[1]);
+                        } else {
+                            cloudAPI.dispatchCloudCommand(senderName, String.join(" ", args));
+                        }
+                    }
+
+                    @Override
+                    public java.util.List<String> suggest(Invocation invocation) {
+                        String[] args = invocation.arguments();
+                        if (args.length <= 1) {
+                            return java.util.Arrays.asList("list", "players", "start", "stop", "send", "maintenance");
+                        }
+                        if (args.length == 2) {
+                            if (args[0].equalsIgnoreCase("stop")) return new ArrayList<>(serverStatus.keySet());
+                            if (args[0].equalsIgnoreCase("send")) return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
+                        }
+                        if (args.length == 3 && args[0].equalsIgnoreCase("send")) {
+                            return new ArrayList<>(serverStatus.keySet());
+                        }
+                        return new ArrayList<>();
+                    }
+                });
+
+        server.getCommandManager().register(
+                server.getCommandManager().metaBuilder("send").plugin(this).build(),
+                new SimpleCommand() {
+                    @Override
+                    public void execute(Invocation invocation) {
+                        if (!invocation.source().hasPermission("redstonecloud.admin")) {
+                            invocation.source().sendMessage(Component.text("§cNo Permissions."));
+                            return;
+                        }
+                        String[] args = invocation.arguments();
+                        if (args.length < 2) {
+                            invocation.source().sendMessage(Component.text("§bCloud §8» §7/send <player> <server>"));
+                            return;
+                        }
+                        cloudAPI.sendPlayer(args[0], args[1]);
+                        invocation.source().sendMessage(Component.text("§bCloud §8» §aTransfer request for §e" + args[0] + " §asent."));
+                    }
+
+                    @Override
+                    public java.util.List<String> suggest(Invocation invocation) {
+                        String[] args = invocation.arguments();
+                        if (args.length <= 1) return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
+                        if (args.length == 2) return new ArrayList<>(serverStatus.keySet());
+                        return new ArrayList<>();
+                    }
+                });
+
+        server.getCommandManager().register(
+                server.getCommandManager().metaBuilder("msg").aliases("w", "tell", "whisper").plugin(this).build(),
+                new SimpleCommand() {
+                    @Override
+                    public void execute(Invocation invocation) {
+                        if (!(invocation.source() instanceof Player)) return;
+                        Player sender = (Player) invocation.source();
+                        String[] args = invocation.arguments();
+                        if (args.length < 2) {
+                            sender.sendMessage(Component.text("§bCloud §8» §7/msg <player> <message>"));
+                            return;
+                        }
+                        String target = args[0];
+                        String message = String.join(" ", java.util.Arrays.copyOfRange(args, 1, args.length));
+                        sendPrivateMessage(sender.getUsername(), target, message);
+                    }
+
+                    @Override
+                    public java.util.List<String> suggest(Invocation invocation) {
+                        if (invocation.arguments().length <= 1) {
+                            return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
+                        }
+                        return new ArrayList<>();
+                    }
+                });
+
+        server.getCommandManager().register(
+                server.getCommandManager().metaBuilder("reply").aliases("r").plugin(this).build(),
+                new SimpleCommand() {
+                    @Override
+                    public void execute(Invocation invocation) {
+                        if (!(invocation.source() instanceof Player)) return;
+                        Player sender = (Player) invocation.source();
+                        String[] args = invocation.arguments();
+                        if (args.length < 1) {
+                            sender.sendMessage(Component.text("§bCloud §8» §7/r <message>"));
+                            return;
+                        }
+                        String target = replyMap.get(sender.getUsername());
+                        if (target == null) {
+                            sender.sendMessage(Component.text("§cYou have nobody to reply to."));
+                            return;
+                        }
+                        String message = String.join(" ", args);
+                        sendPrivateMessage(sender.getUsername(), target, message);
                     }
                 });
 
@@ -129,6 +246,9 @@ public class VelocityBridge {
             out.writeObject(new AuthPacket(serverName, authKey, serverPort, isProxy));
             out.flush();
 
+            cloudAPI = new CloudAPIImpl(out, serverName);
+            logger.info("[CloudPlugin] CloudAPI initialized! Use CloudAPI.getInstance() in your plugins.");
+
             new Thread(() -> {
                 try {
                     while (socket != null && !socket.isClosed()) {
@@ -158,6 +278,7 @@ public class VelocityBridge {
                                     cachedGroups.size(), cachedUsers.size());
                         } else if (obj instanceof MaintenanceUpdatePacket) {
                             maintenance = ((MaintenanceUpdatePacket) obj).isMaintenance();
+                            if (cloudAPI != null) cloudAPI.setMaintenance(maintenance);
                             logger.info("[CloudPlugin] Maintenance mode updated: {}", maintenance);
                         } else if (obj instanceof SyncConfigPacket) {
                             settings = ((SyncConfigPacket) obj).getSettings();
@@ -168,6 +289,27 @@ public class VelocityBridge {
                         } else if (obj instanceof ServerStatusPacket) {
                             ServerStatusPacket pkt = (ServerStatusPacket) obj;
                             serverStatus.put(pkt.getServerName(), pkt);
+                            if (cloudAPI != null) cloudAPI.updateServerStatus(pkt);
+                        } else if (obj instanceof GlobalPlayerListPacket) {
+                            GlobalPlayerListPacket gpl = (GlobalPlayerListPacket) obj;
+                            if (cloudAPI != null) cloudAPI.updatePlayerList(gpl.getPlayers());
+                        } else if (obj instanceof SendPlayerPacket) {
+                            SendPlayerPacket sp = (SendPlayerPacket) obj;
+                            server.getPlayer(sp.getPlayerName()).ifPresent(p -> {
+                                server.getServer(sp.getTargetServer()).ifPresent(target -> {
+                                    p.createConnectionRequest(target).fireAndForget();
+                                    p.sendMessage(Component.text("§aSending you to §e" + sp.getTargetServer() + "§a..."));
+                                });
+                            });
+                        } else if (obj instanceof PrivateMessagePacket) {
+                            PrivateMessagePacket pm = (PrivateMessagePacket) obj;
+                            server.getPlayer(pm.getReceiver()).ifPresent(receiver -> {
+                                receiver.sendMessage(Component.text("§bFrom §7" + pm.getSender() + " §8» §f" + pm.getMessage()));
+                                replyMap.put(pm.getReceiver(), pm.getSender());
+                            });
+                            server.getPlayer(pm.getSender()).ifPresent(sender -> {
+                                sender.sendMessage(Component.text("§bTo §7" + pm.getReceiver() + " §8» §f" + pm.getMessage()));
+                            });
                         }
                     }
                 } catch (Exception e) {
@@ -176,7 +318,9 @@ public class VelocityBridge {
             }, "Cloud-Receiver").start();
 
         } catch (Exception e) {
-            logger.error("[CloudPlugin] Connection error: {}", e.getMessage());
+            logger.error("[CloudPlugin] Connection error: {} – retrying in 5s...", e.getMessage());
+            try { Thread.sleep(5000); } catch (InterruptedException ignored) {}
+            connectToNode();
         }
     }
 
@@ -194,7 +338,7 @@ public class VelocityBridge {
     public void onPlayerJoin(PostLoginEvent event) {
         try {
             if (out != null) {
-                out.writeObject(new PlayerActivityPacket(event.getPlayer().getUsername(), true));
+                out.writeObject(new PlayerActivityPacket(event.getPlayer().getUsername(), event.getPlayer().getUniqueId(), true));
                 out.flush();
             }
         } catch (Exception ignored) {
@@ -205,7 +349,7 @@ public class VelocityBridge {
     public void onPlayerQuit(DisconnectEvent event) {
         try {
             if (out != null) {
-                out.writeObject(new PlayerActivityPacket(event.getPlayer().getUsername(), false));
+                out.writeObject(new PlayerActivityPacket(event.getPlayer().getUsername(), event.getPlayer().getUniqueId(), false));
                 out.flush();
             }
         } catch (Exception ignored) {
@@ -345,5 +489,14 @@ public class VelocityBridge {
         } else {
             p.sendMessage(Component.text("§cYou are already on a lobby!"));
         }
+    }
+
+    private void sendPrivateMessage(String sender, String receiver, String message) {
+        try {
+            if (out != null) {
+                out.writeObject(new PrivateMessagePacket(sender, receiver, message));
+                out.flush();
+            }
+        } catch (Exception ignored) {}
     }
 }
