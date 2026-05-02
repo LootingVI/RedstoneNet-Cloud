@@ -3,9 +3,9 @@ package net.redstone.cloud.node.permission;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
+import net.redstone.cloud.api.network.packet.PermissionUpdatePacket;
 import net.redstone.cloud.api.permission.PermissionGroup;
 import net.redstone.cloud.api.permission.PermissionUser;
-import net.redstone.cloud.api.network.packet.PermissionUpdatePacket;
 import net.redstone.cloud.node.CloudNode;
 
 import java.io.File;
@@ -43,7 +43,8 @@ public class PermissionManager {
         }
 
         try (FileReader reader = new FileReader(file)) {
-            Type type = new TypeToken<ConfigFormat>(){}.getType();
+            Type type = new TypeToken<ConfigFormat>() {
+            }.getType();
             ConfigFormat format = gson.fromJson(reader, type);
             if (format != null) {
                 if (format.groups != null) {
@@ -74,11 +75,11 @@ public class PermissionManager {
     public PermissionGroup getGroup(String name) {
         return groups.stream().filter(g -> g.getName().equalsIgnoreCase(name)).findFirst().orElse(null);
     }
-    
+
     public PermissionUser getUser(String name) {
         return users.stream().filter(u -> u.getName().equalsIgnoreCase(name)).findFirst().orElse(null);
     }
-    
+
     public void createUser(String name, String group) {
         if (getUser(name) == null) {
             users.add(new PermissionUser(name, group));
@@ -89,13 +90,18 @@ public class PermissionManager {
 
     public void broadcastUpdate() {
         PermissionUpdatePacket packet = new PermissionUpdatePacket(
-            new ArrayList<>(groups), new ArrayList<>(users)
+                new ArrayList<>(groups), new ArrayList<>(users)
         );
         CloudNode.getInstance().getNetServer().broadcastPacket(packet);
     }
 
-    public List<PermissionGroup> getGroups() { return groups; }
-    public List<PermissionUser> getUsers() { return users; }
+    public List<PermissionGroup> getGroups() {
+        return groups;
+    }
+
+    public List<PermissionUser> getUsers() {
+        return users;
+    }
 
     private static class ConfigFormat {
         List<PermissionGroup> groups;

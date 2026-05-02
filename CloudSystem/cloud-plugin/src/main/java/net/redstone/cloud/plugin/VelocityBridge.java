@@ -5,7 +5,9 @@ import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
+import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.event.permission.PermissionsSetupEvent;
+import com.velocitypowered.api.event.player.KickedFromServerEvent;
 import com.velocitypowered.api.event.player.PlayerChooseInitialServerEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.permission.Tristate;
@@ -15,23 +17,14 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.server.ServerInfo;
 import net.kyori.adventure.text.Component;
-import net.redstone.cloud.api.network.packet.AuthPacket;
-import net.redstone.cloud.api.network.packet.CloudMessagePacket;
-import net.redstone.cloud.api.network.packet.PermissionUpdatePacket;
-import net.redstone.cloud.api.network.packet.PlayerActivityPacket;
-import net.redstone.cloud.api.network.packet.RegisterServerPacket;
-import net.redstone.cloud.api.network.packet.UnregisterServerPacket;
-import net.redstone.cloud.api.network.packet.MaintenanceUpdatePacket;
-import net.redstone.cloud.api.network.packet.SyncConfigPacket;
-import net.redstone.cloud.api.network.packet.ServerStatusPacket;
+import net.redstone.cloud.api.network.packet.*;
+import net.redstone.cloud.api.network.packet.api.GlobalPlayerListPacket;
+import net.redstone.cloud.api.network.packet.api.PrivateMessagePacket;
+import net.redstone.cloud.api.network.packet.api.SendPlayerPacket;
+import net.redstone.cloud.api.network.packet.api.SyncGroupsPacket;
 import net.redstone.cloud.api.permission.PermissionGroup;
 import net.redstone.cloud.api.permission.PermissionUser;
-import net.redstone.cloud.api.network.packet.api.GlobalPlayerListPacket;
-import net.redstone.cloud.api.network.packet.api.SendPlayerPacket;
-import net.redstone.cloud.api.network.packet.api.PrivateMessagePacket;
 import org.slf4j.Logger;
-import com.velocitypowered.api.event.player.KickedFromServerEvent;
-import com.velocitypowered.api.event.connection.PreLoginEvent;
 
 import java.io.File;
 import java.io.ObjectInputStream;
@@ -43,7 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-@Plugin(id = "cloud-plugin", name = "CloudPlugin", version = "1.0", authors = { "RedstoneNet" })
+@Plugin(id = "cloud-plugin", name = "CloudPlugin", version = "1.0", authors = {"RedstoneNet"})
 public class VelocityBridge {
 
     private final ProxyServer server;
@@ -92,6 +85,7 @@ public class VelocityBridge {
                             invocation.source().sendMessage(Component.text("§7/cloud stop <server> §8- §7Stop a server"));
                             invocation.source().sendMessage(Component.text("§7/cloud send <player> <server> §8- §7Send a player"));
                             invocation.source().sendMessage(Component.text("§7/cloud maintenance <on|off> §8- §7Toggle maintenance"));
+                            invocation.source().sendMessage(Component.text("§7/cloud group <list|create|delete> §8- §7Manage groups"));
                             return;
                         }
 
@@ -123,14 +117,17 @@ public class VelocityBridge {
                     public java.util.List<String> suggest(Invocation invocation) {
                         String[] args = invocation.arguments();
                         if (args.length <= 1) {
-                            return java.util.Arrays.asList("list", "players", "start", "stop", "send", "maintenance");
+                            return java.util.Arrays.asList("list", "players", "start", "stop", "send", "maintenance", "group");
                         }
                         if (args.length == 2) {
                             if (args[0].equalsIgnoreCase("stop")) return new ArrayList<>(serverStatus.keySet());
-                            if (args[0].equalsIgnoreCase("send")) return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
+                            if (args[0].equalsIgnoreCase("group")) return java.util.Arrays.asList("list", "create", "delete");
+                            if (args[0].equalsIgnoreCase("send"))
+                                return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
                         }
-                        if (args.length == 3 && args[0].equalsIgnoreCase("send")) {
-                            return new ArrayList<>(serverStatus.keySet());
+                        if (args.length == 3) {
+                            if (args[0].equalsIgnoreCase("send")) return new ArrayList<>(serverStatus.keySet());
+                            if (args[0].equalsIgnoreCase("group") && args[1].equalsIgnoreCase("delete")) return new ArrayList<>(cloudAPI.getOnlineGroups());
                         }
                         return new ArrayList<>();
                     }
@@ -157,7 +154,8 @@ public class VelocityBridge {
                     @Override
                     public java.util.List<String> suggest(Invocation invocation) {
                         String[] args = invocation.arguments();
-                        if (args.length <= 1) return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
+                        if (args.length <= 1)
+                            return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
                         if (args.length == 2) return new ArrayList<>(serverStatus.keySet());
                         return new ArrayList<>();
                     }
@@ -310,6 +308,8 @@ public class VelocityBridge {
                             server.getPlayer(pm.getSender()).ifPresent(sender -> {
                                 sender.sendMessage(Component.text("§bTo §7" + pm.getReceiver() + " §8» §f" + pm.getMessage()));
                             });
+                        } else if (obj instanceof SyncGroupsPacket) {
+                            cloudAPI.updateGroups(((SyncGroupsPacket) obj).getGroups());
                         }
                     }
                 } catch (Exception e) {
@@ -319,7 +319,10 @@ public class VelocityBridge {
 
         } catch (Exception e) {
             logger.error("[CloudPlugin] Connection error: {} – retrying in 5s...", e.getMessage());
-            try { Thread.sleep(5000); } catch (InterruptedException ignored) {}
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException ignored) {
+            }
             connectToNode();
         }
     }
@@ -393,7 +396,7 @@ public class VelocityBridge {
             return;
 
         String reason = event.getServerKickReason().map(
-                c -> net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(c))
+                        c -> net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(c))
                 .orElse("");
         if (reason.toLowerCase().contains("banned") || reason.toLowerCase().contains("kicked")) {
             return;
@@ -497,6 +500,7 @@ public class VelocityBridge {
                 out.writeObject(new PrivateMessagePacket(sender, receiver, message));
                 out.flush();
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 }

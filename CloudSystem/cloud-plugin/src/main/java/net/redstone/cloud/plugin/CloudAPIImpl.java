@@ -22,6 +22,7 @@ public class CloudAPIImpl extends CloudAPI {
     private final String serverName;
     private final Map<UUID, CloudPlayer> onlinePlayers = new ConcurrentHashMap<>();
     private final Map<String, ServerStatusPacket> serverStatus = new ConcurrentHashMap<>();
+    private final List<String> onlineGroups = new ArrayList<>();
     private boolean maintenance = false;
 
     public CloudAPIImpl(ObjectOutputStream out, String serverName) {
@@ -89,6 +90,16 @@ public class CloudAPIImpl extends CloudAPI {
         return maintenance;
     }
 
+    @Override
+    public List<String> getOnlineGroups() {
+        return new ArrayList<>(onlineGroups);
+    }
+
+    @Override
+    public List<String> getOnlineServers() {
+        return new ArrayList<>(serverStatus.keySet());
+    }
+
     // --- Internal update methods called by bridge plugins ---
 
     public void updatePlayerList(List<CloudPlayer> players) {
@@ -100,6 +111,13 @@ public class CloudAPIImpl extends CloudAPI {
 
     public void updateServerStatus(ServerStatusPacket pkt) {
         serverStatus.put(pkt.getServerName(), pkt);
+    }
+
+    public void updateGroups(List<String> groups) {
+        synchronized (onlineGroups) {
+            this.onlineGroups.clear();
+            this.onlineGroups.addAll(groups);
+        }
     }
 
     public void setMaintenance(boolean maintenance) {

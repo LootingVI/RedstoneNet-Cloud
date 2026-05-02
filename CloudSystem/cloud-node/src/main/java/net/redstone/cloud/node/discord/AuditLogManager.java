@@ -26,7 +26,8 @@ public class AuditLogManager {
                 FileWriter w = new FileWriter(logFile);
                 w.write("[]");
                 w.close();
-            } catch (Exception e) {}
+            } catch (Exception e) {
+            }
         }
     }
 
@@ -35,7 +36,8 @@ public class AuditLogManager {
             JsonArray arr = new JsonArray();
             try (FileReader r = new FileReader(logFile)) {
                 arr = com.google.gson.JsonParser.parseReader(r).getAsJsonArray();
-            } catch (Exception e) {}
+            } catch (Exception e) {
+            }
 
             JsonObject entry = new JsonObject();
             entry.addProperty("timestamp", System.currentTimeMillis());

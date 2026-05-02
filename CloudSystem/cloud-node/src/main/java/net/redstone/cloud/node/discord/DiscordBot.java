@@ -61,7 +61,8 @@ public class DiscordBot extends ListenerAdapter {
         this.config = newConfig;
         try (FileWriter w = new FileWriter(configFile)) {
             gson.toJson(config, w);
-        } catch (Exception e) {}
+        } catch (Exception e) {
+        }
         CloudNode.getInstance().getAuditLogManager().logAction("Updated Discord Config", "SYSTEM", "CloudNode", "");
         startBot(); // Reload bot when config changes
     }
@@ -90,7 +91,7 @@ public class DiscordBot extends ListenerAdapter {
                     .addEventListeners(this)
                     .build();
             jda.awaitReady();
-            
+
             String guildId = config.has("guildId") ? config.get("guildId").getAsString() : "";
             if (!guildId.isEmpty() && jda.getGuildById(guildId) != null) {
                 jda.getGuildById(guildId).updateCommands()
@@ -156,14 +157,14 @@ public class DiscordBot extends ListenerAdapter {
 
         // Gen new
         String token = CloudNode.getInstance().getWebTokenManager().generateToken(userId, userName, avatarUrl, fullAccess, allowedGroups);
-        
+
         // Log it
         CloudNode.getInstance().getAuditLogManager().logAction("Discord /cloudlogin generate token", userId, userName, avatarUrl);
 
         event.reply("✅ **Dashboard Login Successful**\n" +
-                "Your Web Token is: `" + token + "`\n" +
-                "Or use the auto-login link: <http://" + CloudNode.getInstance().getHost() + ":3030/?token=" + token + ">\n" +
-                "*(This token is valid for 24 hours and bound to your roles)*")
+                        "Your Web Token is: `" + token + "`\n" +
+                        "Or use the auto-login link: <http://" + CloudNode.getInstance().getHost() + ":3030/?token=" + token + ">\n" +
+                        "*(This token is valid for 24 hours and bound to your roles)*")
                 .setEphemeral(true).queue();
     }
 }

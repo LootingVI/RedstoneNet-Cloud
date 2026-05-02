@@ -6,13 +6,13 @@ import com.google.gson.JsonObject;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import net.redstone.cloud.api.permission.PermissionGroup;
+import net.redstone.cloud.api.permission.PermissionUser;
 import net.redstone.cloud.node.CloudNode;
-import net.redstone.cloud.node.process.CloudServerProcess;
 import net.redstone.cloud.node.group.Group;
 import net.redstone.cloud.node.logging.Logger;
 import net.redstone.cloud.node.permission.PermissionManager;
-import net.redstone.cloud.api.permission.PermissionGroup;
-import net.redstone.cloud.api.permission.PermissionUser;
+import net.redstone.cloud.node.process.CloudServerProcess;
 
 import java.io.*;
 import java.net.InetSocketAddress;
@@ -201,7 +201,7 @@ public class WebServer {
                 File targetFile = new File(templatePluginsDir, filename);
 
                 try (InputStream in = java.net.URI.create(urlString).toURL().openStream();
-                        FileOutputStream out = new FileOutputStream(targetFile)) {
+                     FileOutputStream out = new FileOutputStream(targetFile)) {
                     byte[] buffer = new byte[8192];
                     int bytesRead;
                     while ((bytesRead = in.read(buffer)) != -1) {

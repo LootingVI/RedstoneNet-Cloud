@@ -15,6 +15,11 @@ public class PermissionUpdatePacket extends Packet {
         this.users = users;
     }
 
-    public List<PermissionGroup> getGroups() { return groups; }
-    public List<PermissionUser> getUsers() { return users; }
+    public List<PermissionGroup> getGroups() {
+        return groups;
+    }
+
+    public List<PermissionUser> getUsers() {
+        return users;
+    }
 }

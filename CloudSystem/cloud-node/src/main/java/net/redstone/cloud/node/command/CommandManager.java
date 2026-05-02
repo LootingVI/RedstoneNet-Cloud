@@ -25,7 +25,7 @@ public class CommandManager {
 
     public boolean dispatchCommand(CommandSender sender, String line) {
         if (line == null || line.trim().isEmpty()) return false;
-        
+
         String[] parts = line.split(" ");
         String name = parts[0].toLowerCase();
         String[] args = Arrays.copyOfRange(parts, 1, parts.length);

@@ -11,6 +11,11 @@ public class CloudMessagePacket extends Packet {
         this.message = message;
     }
 
-    public String getTargetName() { return targetName; }
-    public String getMessage() { return message; }
+    public String getTargetName() {
+        return targetName;
+    }
+
+    public String getMessage() {
+        return message;
+    }
 }

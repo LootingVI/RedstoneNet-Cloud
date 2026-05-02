@@ -19,12 +19,35 @@ public class PermissionGroup implements Serializable {
         this.permissions = new ArrayList<>();
     }
 
-    public String getName() { return name; }
-    public String getPrefix() { return prefix; }
-    public void setPrefix(String prefix) { this.prefix = prefix; }
-    public int getWeight() { return weight; }
-    public void setWeight(int weight) { this.weight = weight; }
-    public boolean isDefault() { return isDefault; }
-    public void setDefault(boolean isDefault) { this.isDefault = isDefault; }
-    public List<String> getPermissions() { return permissions; }
+    public String getName() {
+        return name;
+    }
+
+    public String getPrefix() {
+        return prefix;
+    }
+
+    public void setPrefix(String prefix) {
+        this.prefix = prefix;
+    }
+
+    public int getWeight() {
+        return weight;
+    }
+
+    public void setWeight(int weight) {
+        this.weight = weight;
+    }
+
+    public boolean isDefault() {
+        return isDefault;
+    }
+
+    public void setDefault(boolean isDefault) {
+        this.isDefault = isDefault;
+    }
+
+    public List<String> getPermissions() {
+        return permissions;
+    }
 }

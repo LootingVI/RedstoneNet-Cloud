@@ -47,7 +47,7 @@ public class CloudPluginManager {
 
                 try (InputStreamReader isr = new InputStreamReader(zipFile.getInputStream(entry))) {
                     JsonObject json = gson.fromJson(isr, JsonObject.class);
-                    
+
                     String name = json.get("name").getAsString();
                     String version = json.get("version").getAsString();
                     String author = json.has("author") ? json.get("author").getAsString() : "Unknown";
@@ -69,7 +69,7 @@ public class CloudPluginManager {
 
                     CloudPlugin plugin = (CloudPlugin) clazz.getDeclaredConstructor().newInstance();
                     plugin.init(description);
-                    
+
                     Logger.info("Loading CloudPlugin: " + name + " v" + version);
                     plugin.onLoad();
                     plugins.add(plugin);
@@ -107,7 +107,8 @@ public class CloudPluginManager {
         for (URLClassLoader loader : loaders) {
             try {
                 loader.close();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         loaders.clear();
         plugins.clear();

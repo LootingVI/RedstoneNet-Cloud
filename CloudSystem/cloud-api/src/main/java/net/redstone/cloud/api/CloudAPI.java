@@ -46,4 +46,10 @@ public abstract class CloudAPI {
 
     /** Check if the network is in maintenance mode. */
     public abstract boolean isMaintenance();
+
+    /** Get a list of all existing server groups. */
+    public abstract List<String> getOnlineGroups();
+
+    /** Get a list of all active server names. */
+    public abstract List<String> getOnlineServers();
 }

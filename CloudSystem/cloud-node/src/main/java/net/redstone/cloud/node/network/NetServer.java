@@ -1,21 +1,11 @@
 package net.redstone.cloud.node.network;
 
 import net.redstone.cloud.api.network.Packet;
-import net.redstone.cloud.api.network.packet.AuthPacket;
-import net.redstone.cloud.api.network.packet.CloudCommandPacket;
-import net.redstone.cloud.api.network.packet.CloudMessagePacket;
-import net.redstone.cloud.api.network.packet.PermissionUpdatePacket;
-import net.redstone.cloud.api.network.packet.PlayerActivityPacket;
-import net.redstone.cloud.api.network.packet.PlayerCountPacket;
-import net.redstone.cloud.api.network.packet.RegisterServerPacket;
-import net.redstone.cloud.api.network.packet.UnregisterServerPacket;
-import net.redstone.cloud.api.network.packet.PerformancePacket;
-import net.redstone.cloud.api.network.packet.MaintenanceUpdatePacket;
-import net.redstone.cloud.api.network.packet.SyncConfigPacket;
+import net.redstone.cloud.api.network.packet.*;
+import net.redstone.cloud.api.network.packet.api.PrivateMessagePacket;
+import net.redstone.cloud.api.network.packet.api.SendPlayerPacket;
 import net.redstone.cloud.api.network.packet.api.StartServerPacket;
 import net.redstone.cloud.api.network.packet.api.StopServerPacket;
-import net.redstone.cloud.api.network.packet.api.SendPlayerPacket;
-import net.redstone.cloud.api.network.packet.api.PrivateMessagePacket;
 import net.redstone.cloud.api.player.CloudPlayer;
 import net.redstone.cloud.node.CloudNode;
 import net.redstone.cloud.node.logging.Logger;
@@ -90,7 +80,8 @@ public class NetServer {
                     try {
                         pout.writeObject(new UnregisterServerPacket(associatedServer));
                         pout.flush();
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                 }
             }
             if (outX != null) {
@@ -105,7 +96,8 @@ public class NetServer {
             try {
                 out.writeObject(packet);
                 out.flush();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -114,7 +106,10 @@ public class NetServer {
             AuthPacket auth = (AuthPacket) packet;
             if (!auth.getAuthKey().equals(CloudNode.getInstance().getAuthKey())) {
                 Logger.error("Auth failed for " + auth.getServerName() + " (Invalid key!)");
-                try { socket.close(); } catch (Exception ignored) {}
+                try {
+                    socket.close();
+                } catch (Exception ignored) {
+                }
                 return null;
             }
             Logger.success("Authentication OK [Proxy=" + auth.isProxy() + "]: " + auth.getServerName());
@@ -128,7 +123,8 @@ public class NetServer {
                         try {
                             out.writeObject(new RegisterServerPacket(srv.getServerName(), "127.0.0.1", srv.getPort()));
                             out.flush();
-                        } catch (Exception ignored) {}
+                        } catch (Exception ignored) {
+                        }
                     }
                 }
             } else {
@@ -137,7 +133,8 @@ public class NetServer {
                     try {
                         pOut.writeObject(new RegisterServerPacket(auth.getServerName(), "127.0.0.1", auth.getPort()));
                         pOut.flush();
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                 }
             }
             // Send permissions immediately on connect
@@ -155,7 +152,8 @@ public class NetServer {
                         CloudNode.getInstance().getNetworkSettings()
                 ));
                 out.flush();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
             return auth.getServerName();
 
         } else if (packet instanceof CloudCommandPacket) {
@@ -180,7 +178,8 @@ public class NetServer {
                             "§bCloud §8» §7/cloud <list|start <group> <count>|stop <name>>"));
                 }
                 out.flush();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
 
         } else if (packet instanceof PlayerActivityPacket) {
             PlayerActivityPacket act = (PlayerActivityPacket) packet;
@@ -225,7 +224,8 @@ public class NetServer {
                 try {
                     pOut.writeObject(sp);
                     pOut.flush();
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
         } else if (packet instanceof PrivateMessagePacket) {
             PrivateMessagePacket pm = (PrivateMessagePacket) packet;
@@ -233,7 +233,8 @@ public class NetServer {
                 try {
                     pOut.writeObject(pm);
                     pOut.flush();
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
         }
         return null;

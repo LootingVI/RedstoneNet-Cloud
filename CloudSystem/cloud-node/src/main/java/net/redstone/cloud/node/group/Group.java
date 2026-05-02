@@ -8,8 +8,8 @@ public class Group {
     private final boolean proxy;
     private final String softwareFile;
     private int startPort; // 0 means random/dynamic port
-    private int minOnline; 
-    private int maxRestarts; 
+    private int minOnline;
+    private int maxRestarts;
     private String templateName;
     private boolean bedrockSupport;
     private boolean autoScaleEnabled = false;
@@ -35,31 +35,111 @@ public class Group {
         this.bedrockSupport = bedrockSupport;
     }
 
-    public String getName() { return name; }
-    public int getMemory() { return memory; }
-    public boolean isStaticService() { return staticService; }
-    public boolean isProxy() { return proxy; }
-    public String getSoftwareFile() { return softwareFile; }
-    public int getStartPort() { return startPort; }
-    public void setStartPort(int startPort) { this.startPort = startPort; }
-    public int getMinOnline() { return minOnline; }
-    public void setMinOnline(int minOnline) { this.minOnline = minOnline; }
-    public int getMaxRestarts() { return maxRestarts; }
-    public void setMaxRestarts(int maxRestarts) { this.maxRestarts = maxRestarts; }
-    public String getTemplateName() { return templateName; }
-    public void setTemplateName(String templateName) { this.templateName = templateName; }
-    public boolean hasBedrockSupport() { return bedrockSupport; }
-    public void setBedrockSupport(boolean bedrockSupport) { this.bedrockSupport = bedrockSupport; }
-    public boolean isAutoScaleEnabled() { return autoScaleEnabled; }
-    public void setAutoScaleEnabled(boolean autoScaleEnabled) { this.autoScaleEnabled = autoScaleEnabled; }
-    public int getAutoScaleThreshold() { return autoScaleThreshold; }
-    public void setAutoScaleThreshold(int autoScaleThreshold) { this.autoScaleThreshold = autoScaleThreshold; }
-    public int getMaxInstances() { return maxInstances; }
-    public void setMaxInstances(int maxInstances) { this.maxInstances = maxInstances; }
-    public int getMaxPlayers() { return maxPlayers; }
-    public void setMaxPlayers(int maxPlayers) { this.maxPlayers = maxPlayers; }
-    public String getResourcePack() { return resourcePack; }
-    public void setResourcePack(String resourcePack) { this.resourcePack = resourcePack; }
-    public boolean isForceResourcePack() { return forceResourcePack; }
-    public void setForceResourcePack(boolean forceResourcePack) { this.forceResourcePack = forceResourcePack; }
+    public String getName() {
+        return name;
+    }
+
+    public int getMemory() {
+        return memory;
+    }
+
+    public boolean isStaticService() {
+        return staticService;
+    }
+
+    public boolean isProxy() {
+        return proxy;
+    }
+
+    public String getSoftwareFile() {
+        return softwareFile;
+    }
+
+    public int getStartPort() {
+        return startPort;
+    }
+
+    public void setStartPort(int startPort) {
+        this.startPort = startPort;
+    }
+
+    public int getMinOnline() {
+        return minOnline;
+    }
+
+    public void setMinOnline(int minOnline) {
+        this.minOnline = minOnline;
+    }
+
+    public int getMaxRestarts() {
+        return maxRestarts;
+    }
+
+    public void setMaxRestarts(int maxRestarts) {
+        this.maxRestarts = maxRestarts;
+    }
+
+    public String getTemplateName() {
+        return templateName;
+    }
+
+    public void setTemplateName(String templateName) {
+        this.templateName = templateName;
+    }
+
+    public boolean hasBedrockSupport() {
+        return bedrockSupport;
+    }
+
+    public void setBedrockSupport(boolean bedrockSupport) {
+        this.bedrockSupport = bedrockSupport;
+    }
+
+    public boolean isAutoScaleEnabled() {
+        return autoScaleEnabled;
+    }
+
+    public void setAutoScaleEnabled(boolean autoScaleEnabled) {
+        this.autoScaleEnabled = autoScaleEnabled;
+    }
+
+    public int getAutoScaleThreshold() {
+        return autoScaleThreshold;
+    }
+
+    public void setAutoScaleThreshold(int autoScaleThreshold) {
+        this.autoScaleThreshold = autoScaleThreshold;
+    }
+
+    public int getMaxInstances() {
+        return maxInstances;
+    }
+
+    public void setMaxInstances(int maxInstances) {
+        this.maxInstances = maxInstances;
+    }
+
+    public int getMaxPlayers() {
+        return maxPlayers;
+    }
+
+    public void setMaxPlayers(int maxPlayers) {
+        this.maxPlayers = maxPlayers;
+    }
+
+    public String getResourcePack() {
+        return resourcePack;
+    }
+
+    public void setResourcePack(String resourcePack) {
+        this.resourcePack = resourcePack;
+    }
+
+    public boolean isForceResourcePack() {
+        return forceResourcePack;
+    }
+
+    public void setForceResourcePack(boolean forceResourcePack) {
+        this.forceResourcePack = forceResourcePack;
+    }
 }

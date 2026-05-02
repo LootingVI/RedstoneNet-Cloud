@@ -3,6 +3,7 @@ package net.redstone.cloud.node.group;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
+import net.redstone.cloud.node.CloudNode;
 import net.redstone.cloud.node.logging.Logger;
 
 import java.io.File;
@@ -11,7 +12,6 @@ import java.io.FileWriter;
 import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Map;
-import net.redstone.cloud.node.CloudNode;
 
 public class GroupManager {
 
@@ -26,7 +26,8 @@ public class GroupManager {
     public void loadGroups() {
         if (!groupsFile.exists()) return;
         try (FileReader reader = new FileReader(groupsFile)) {
-            Type type = new TypeToken<Map<String, Group>>(){}.getType();
+            Type type = new TypeToken<Map<String, Group>>() {
+            }.getType();
             Map<String, Group> loaded = gson.fromJson(reader, type);
             if (loaded != null) groups.putAll(loaded);
             Logger.info("Loaded " + groups.size() + " groups from config.");

@@ -15,8 +15,19 @@ public class ServerStatusPacket extends Packet {
         this.maxPlayers = maxPlayers;
     }
 
-    public String getServerName() { return serverName; }
-    public String getState() { return state; }
-    public int getPlayerCount() { return playerCount; }
-    public int getMaxPlayers() { return maxPlayers; }
+    public String getServerName() {
+        return serverName;
+    }
+
+    public String getState() {
+        return state;
+    }
+
+    public int getPlayerCount() {
+        return playerCount;
+    }
+
+    public int getMaxPlayers() {
+        return maxPlayers;
+    }
 }

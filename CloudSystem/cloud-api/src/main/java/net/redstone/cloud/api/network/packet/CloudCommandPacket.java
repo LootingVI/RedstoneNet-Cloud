@@ -11,6 +11,11 @@ public class CloudCommandPacket extends Packet {
         this.commandLine = commandLine;
     }
 
-    public String getSenderName() { return senderName; }
-    public String getCommandLine() { return commandLine; }
+    public String getSenderName() {
+        return senderName;
+    }
+
+    public String getCommandLine() {
+        return commandLine;
+    }
 }

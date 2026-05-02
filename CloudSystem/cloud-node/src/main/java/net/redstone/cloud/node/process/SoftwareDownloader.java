@@ -3,8 +3,8 @@ package net.redstone.cloud.node.process;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.redstone.cloud.node.logging.Logger;
 import net.redstone.cloud.node.CloudNode;
+import net.redstone.cloud.node.logging.Logger;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -36,10 +36,10 @@ public class SoftwareDownloader {
                 int latestBuild = builds.get(builds.size() - 1).getAsInt();
 
                 Logger.info("-> Downloading " + type + " build " + latestBuild + "...");
-                
+
                 String downloadUrl = "https://api.papermc.io/v2/projects/" + type + "/versions/" + version + "/builds/" + latestBuild + "/downloads/" + type + "-" + version + "-" + latestBuild + ".jar";
                 downloadFile(downloadUrl, "local/software/" + type + "-" + version + ".jar");
-                
+
                 Logger.success("-> " + type.toUpperCase() + " " + version + " downloaded successfully!");
 
             } catch (Exception e) {
@@ -51,11 +51,11 @@ public class SoftwareDownloader {
     public static void downloadFile(String urlStr, String destPath) throws Exception {
         File file = new File(destPath);
         file.getParentFile().mkdirs();
-        
+
         URL url = new URL(urlStr);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestProperty("User-Agent", "RedstoneNet-CloudSystem");
-        
+
         try (InputStream in = connection.getInputStream();
              FileOutputStream out = new FileOutputStream(file)) {
             byte[] buffer = new byte[1024];

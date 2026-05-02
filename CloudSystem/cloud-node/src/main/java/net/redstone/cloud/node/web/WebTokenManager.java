@@ -1,6 +1,7 @@
 package net.redstone.cloud.node.web;
 
 import net.redstone.cloud.node.CloudNode;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,7 +17,7 @@ public class WebTokenManager {
         // groupName -> List of Permissions ("START", "STOP", "CONSOLE")
         public Map<String, List<String>> groupPermissions = new HashMap<>();
     }
-    
+
     private final Map<String, TokenInfo> tokens = new HashMap<>();
 
     public String generateToken() {
@@ -51,7 +52,7 @@ public class WebTokenManager {
         }
         return info;
     }
-    
+
     public TokenInfo getInfoByDiscordId(String discordId) {
         for (TokenInfo info : tokens.values()) {
             if (info.discordId.equals(discordId) && System.currentTimeMillis() < info.expiresAt) {

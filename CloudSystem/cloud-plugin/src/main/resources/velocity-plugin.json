@@ -3,6 +3,8 @@
   "name": "CloudPlugin",
   "version": "1.0-SNAPSHOT",
   "description": "Velocity Bridge for CloudSystem",
-  "authors": ["RedstoneNet"],
+  "authors": [
+    "RedstoneNet"
+  ],
   "main": "net.redstone.cloud.plugin.VelocityBridge"
 }

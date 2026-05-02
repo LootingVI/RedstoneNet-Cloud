@@ -15,8 +15,19 @@ public class PermissionUser implements Serializable {
         this.permissions = new ArrayList<>();
     }
 
-    public String getName() { return name; }
-    public String getGroup() { return group; }
-    public void setGroup(String group) { this.group = group; }
-    public List<String> getPermissions() { return permissions; }
+    public String getName() {
+        return name;
+    }
+
+    public String getGroup() {
+        return group;
+    }
+
+    public void setGroup(String group) {
+        this.group = group;
+    }
+
+    public List<String> getPermissions() {
+        return permissions;
+    }
 }

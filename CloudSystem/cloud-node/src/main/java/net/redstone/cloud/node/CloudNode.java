@@ -1,6 +1,7 @@
 package net.redstone.cloud.node;
 
 import net.redstone.cloud.api.network.packet.SyncConfigPacket;
+import net.redstone.cloud.api.network.packet.api.GlobalPlayerListPacket;
 import net.redstone.cloud.node.network.NetServer;
 import net.redstone.cloud.node.group.GroupManager;
 import net.redstone.cloud.node.process.ServerManager;
@@ -284,8 +285,11 @@ public class CloudNode {
                                     -1));
                         }
                         // Sync global player list to all connected servers
-                        netServer.broadcastPacket(new net.redstone.cloud.api.network.packet.api.GlobalPlayerListPacket(
+                        netServer.broadcastPacket(new GlobalPlayerListPacket(
                                 playerManager.getOnlinePlayers()));
+                        // Sync known groups to all connected servers
+                        netServer.broadcastPacket(new net.redstone.cloud.api.network.packet.api.SyncGroupsPacket(
+                                new java.util.ArrayList<>(groupManager.getGroups().keySet())));
                     }
                 } catch (InterruptedException ignored) {
                 }
@@ -310,7 +314,7 @@ public class CloudNode {
                     .completer((reader, line, candidates) -> {
                         String buffer = line.word().toLowerCase();
                         String[] cmds = { "help", "stop", "clear", "create", "start", "list", "stopserver", "software",
-                                "webtokens", "perms", "maintenance", "reload", "leave", "screen", "backup" };
+                                "webtokens", "perms", "maintenance", "reload", "leave", "screen", "backup", "group" };
                         for (String cmd : cmds) {
                             if (cmd.startsWith(buffer)) {
                                 candidates.add(new Candidate(cmd));
@@ -432,11 +436,41 @@ public class CloudNode {
                     Logger.warn("Usage: screen <ServerName>");
                 }
                 break;
+            case "group":
+                if (args.length >= 2) {
+                    if (args[1].equalsIgnoreCase("list")) {
+                        groupManager.listGroups();
+                    } else if (args[1].equalsIgnoreCase("delete") && args.length == 3) {
+                        groupManager.deleteGroup(args[2]);
+                    } else if (args[1].equalsIgnoreCase("create") && args.length >= 8) {
+                        try {
+                            String name = args[2];
+                            int memory = Integer.parseInt(args[3]);
+                            boolean isStatic = Boolean.parseBoolean(args[4]);
+                            boolean isProxy = Boolean.parseBoolean(args[5]);
+                            String software = args[6];
+                            boolean bedrockSupport = Boolean.parseBoolean(args[7]);
+                            int startPort = args.length >= 9 ? Integer.parseInt(args[8]) : 0;
+                            int minOnline = args.length == 10 ? Integer.parseInt(args[9]) : (isStatic ? 1 : 0);
+                            groupManager.createGroup(name, memory, isStatic, isProxy, software, startPort, minOnline,
+                                    bedrockSupport);
+                        } catch (Exception e) {
+                            Logger.error(
+                                    "Usage: group create <Name> <MB> <isStatic> <isProxy> <JAR> <Bedrock> [Port] [minOnline]");
+                        }
+                    } else {
+                        Logger.info("Usage: group <list|create|delete>");
+                    }
+                } else {
+                    Logger.info("Usage: group <list|create|delete>");
+                }
+                break;
             case "list":
                 groupManager.listGroups();
                 serverManager.listServers();
                 break;
             case "create":
+                Logger.info("Note: Use 'group create' instead.");
                 if (args.length >= 7 && args.length <= 9) {
                     try {
                         String name = args[1];

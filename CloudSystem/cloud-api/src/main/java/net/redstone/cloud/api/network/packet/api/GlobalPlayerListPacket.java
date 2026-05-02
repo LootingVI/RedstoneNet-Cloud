@@ -2,6 +2,7 @@ package net.redstone.cloud.api.network.packet.api;
 
 import net.redstone.cloud.api.network.Packet;
 import net.redstone.cloud.api.player.CloudPlayer;
+
 import java.util.List;
 
 public class GlobalPlayerListPacket extends Packet {

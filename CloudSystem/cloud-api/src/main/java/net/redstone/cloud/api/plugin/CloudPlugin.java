@@ -15,10 +15,13 @@ public abstract class CloudPlugin {
         return description;
     }
 
-    public void onLoad() {}
+    public void onLoad() {
+    }
 
-    public void onEnable() {}
+    public void onEnable() {
+    }
 
-    public void onDisable() {}
+    public void onDisable() {
+    }
 
 }

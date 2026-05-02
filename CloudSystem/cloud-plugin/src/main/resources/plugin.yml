@@ -7,5 +7,5 @@ description: The Bridge Plugin for the RedstoneNet CloudSystem.
 commands:
   cloud:
     description: RedstoneNet Cloud Command
-    aliases: [rc, redstonecloud]
+    aliases: [ rc, redstonecloud ]
     permission: redstonecloud.admin

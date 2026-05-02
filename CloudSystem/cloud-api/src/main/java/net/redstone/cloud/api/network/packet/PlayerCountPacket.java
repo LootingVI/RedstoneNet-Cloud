@@ -11,6 +11,11 @@ public class PlayerCountPacket extends Packet {
         this.playerCount = playerCount;
     }
 
-    public String getServerName() { return serverName; }
-    public int getPlayerCount() { return playerCount; }
+    public String getServerName() {
+        return serverName;
+    }
+
+    public int getPlayerCount() {
+        return playerCount;
+    }
 }

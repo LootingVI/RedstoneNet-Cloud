@@ -1,14 +1,14 @@
 package net.redstone.cloud.testplugin;
 
-import net.redstone.cloud.api.plugin.CloudPlugin;
-import net.redstone.cloud.node.logging.Logger;
 import net.redstone.cloud.api.command.Command;
 import net.redstone.cloud.api.command.CommandSender;
-import net.redstone.cloud.node.CloudNode;
-import net.redstone.cloud.api.event.Listener;
 import net.redstone.cloud.api.event.CloudEventHandler;
-import net.redstone.cloud.api.event.server.CloudServerStartEvent;
+import net.redstone.cloud.api.event.Listener;
 import net.redstone.cloud.api.event.node.CloudConsoleCommandExecuteEvent;
+import net.redstone.cloud.api.event.server.CloudServerStartEvent;
+import net.redstone.cloud.api.plugin.CloudPlugin;
+import net.redstone.cloud.node.CloudNode;
+import net.redstone.cloud.node.logging.Logger;
 
 public class TestPlugin extends CloudPlugin implements Listener {
 
@@ -20,7 +20,7 @@ public class TestPlugin extends CloudPlugin implements Listener {
     @Override
     public void onEnable() {
         Logger.success("[TestPlugin] onEnable() called! Plugin " + getDescription().getName() + " v" + getDescription().getVersion() + " by " + getDescription().getAuthor() + " is now active.");
-        
+
         // Registering a Cloud Command 
         CloudNode.getInstance().getCommandManager().registerCommand(new Command("testcmd", "A simple test command", "test") {
             @Override
@@ -29,7 +29,7 @@ public class TestPlugin extends CloudPlugin implements Listener {
                 sender.sendMessage("You provided " + args.length + " arguments: " + String.join(" ", args));
             }
         });
-        
+
         // Registering Events
         CloudNode.getInstance().getEventManager().registerListeners(this);
     }

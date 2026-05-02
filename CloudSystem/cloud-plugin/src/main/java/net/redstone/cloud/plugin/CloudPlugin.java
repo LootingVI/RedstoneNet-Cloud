@@ -9,6 +9,7 @@ import net.redstone.cloud.api.network.packet.PlayerCountPacket;
 import net.redstone.cloud.api.network.packet.ServerStatusPacket;
 import net.redstone.cloud.api.network.packet.SyncConfigPacket;
 import net.redstone.cloud.api.network.packet.api.GlobalPlayerListPacket;
+import net.redstone.cloud.api.network.packet.api.SyncGroupsPacket;
 import net.redstone.cloud.api.permission.PermissionGroup;
 import net.redstone.cloud.api.permission.PermissionUser;
 import org.bukkit.Location;
@@ -81,6 +82,7 @@ public class CloudPlugin extends JavaPlugin implements Listener {
                     sender.sendMessage("§7/cloud stop <server> §8- §7Stop a server");
                     sender.sendMessage("§7/cloud send <player> <server> §8- §7Send a player");
                     sender.sendMessage("§7/cloud maintenance <on|off> §8- §7Toggle maintenance");
+                    sender.sendMessage("§7/cloud group <list|create|delete> §8- §7Manage groups");
                     return true;
                 }
 
@@ -110,14 +112,16 @@ public class CloudPlugin extends JavaPlugin implements Listener {
 
             getCommand("cloud").setTabCompleter((sender, command, alias, args) -> {
                 if (args.length == 1) {
-                    return java.util.Arrays.asList("list", "players", "start", "stop", "send", "maintenance");
+                    return java.util.Arrays.asList("list", "players", "start", "stop", "send", "maintenance", "group");
                 }
                 if (args.length == 2) {
                     if (args[0].equalsIgnoreCase("stop")) return new ArrayList<>(serverStatus.keySet());
+                    if (args[0].equalsIgnoreCase("group")) return java.util.Arrays.asList("list", "create", "delete");
                     if (args[0].equalsIgnoreCase("send")) return cloudAPI.getOnlinePlayers().stream().map(p -> p.getName()).collect(java.util.stream.Collectors.toList());
                 }
-                if (args.length == 3 && args[0].equalsIgnoreCase("send")) {
-                    return new ArrayList<>(serverStatus.keySet());
+                if (args.length == 3) {
+                    if (args[0].equalsIgnoreCase("send")) return new ArrayList<>(serverStatus.keySet());
+                    if (args[0].equalsIgnoreCase("group") && args[1].equalsIgnoreCase("delete")) return new ArrayList<>(cloudAPI.getOnlineGroups());
                 }
                 return new ArrayList<>();
             });
@@ -285,6 +289,9 @@ public class CloudPlugin extends JavaPlugin implements Listener {
                                 GlobalPlayerListPacket gpl = (GlobalPlayerListPacket) obj;
                                 if (cloudAPI != null)
                                     cloudAPI.updatePlayerList(gpl.getPlayers());
+                            } else if (obj instanceof SyncGroupsPacket) {
+                                if (cloudAPI != null)
+                                    cloudAPI.updateGroups(((SyncGroupsPacket) obj).getGroups());
                             }
                         }
                     } catch (Exception ignored) {

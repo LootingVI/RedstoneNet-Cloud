@@ -9,5 +9,7 @@ public class MaintenanceUpdatePacket extends Packet {
         this.maintenance = maintenance;
     }
 
-    public boolean isMaintenance() { return maintenance; }
+    public boolean isMaintenance() {
+        return maintenance;
+    }
 }

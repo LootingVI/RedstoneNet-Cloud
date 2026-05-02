@@ -1,6 +1,7 @@
 package net.redstone.cloud.api.network.packet;
 
 import net.redstone.cloud.api.network.Packet;
+
 import java.util.Map;
 
 public class SyncConfigPacket extends Packet {
