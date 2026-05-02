@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.redstone.cloud.node.logging.Logger;
+import net.redstone.cloud.node.CloudNode;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -63,5 +64,6 @@ public class SoftwareDownloader {
                 out.write(buffer, 0, read);
             }
         }
+        CloudNode.getInstance().getEventManager().callEvent(new net.redstone.cloud.api.event.network.CloudSoftwareDownloadEvent(urlStr, destPath));
     }
 }

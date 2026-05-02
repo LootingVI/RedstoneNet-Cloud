@@ -94,6 +94,101 @@ The system includes a performance-based auto-restart logic to ensure stability:
 
 ---
 
+## 🔌 Plugin API Documentation
+
+The RedstoneNet CloudSystem allows you to write plugins to modify the core functionality of the Cloud Node directly.
+
+### 1. Project Setup
+To create your own plugin, depend on the `cloud-api` (and optionally `cloud-node` for direct internals access) in your `pom.xml`:
+
+```xml
+<dependency>
+    <groupId>net.redstone</groupId>
+    <artifactId>cloud-api</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <scope>provided</scope>
+</dependency>
+```
+
+### 2. The Main Class
+Your main class must extend `net.redstone.cloud.api.plugin.CloudPlugin`.
+
+```java
+import net.redstone.cloud.api.plugin.CloudPlugin;
+
+public class MyAwesomePlugin extends CloudPlugin {
+    @Override
+    public void onEnable() {
+        System.out.println("MyAwesomePlugin is now running!");
+    }
+}
+```
+
+### 3. Plugin Meta (`cloud-plugin.json`)
+You must include a `cloud-plugin.json` in your `src/main/resources` folder so the Cloud Node knows how to load it:
+
+```json
+{
+  "name": "MyAwesomePlugin",
+  "version": "1.0",
+  "author": "YourName",
+  "main": "com.yourdomain.cloud.MyAwesomePlugin"
+}
+```
+
+---
+
+### ⌨️ Creating Console Commands
+
+You can register custom commands executable directly from the Cloud Console using the `CommandManager`.
+
+```java
+import net.redstone.cloud.api.command.Command;
+import net.redstone.cloud.api.command.CommandSender;
+import net.redstone.cloud.node.CloudNode;
+
+// Inside your onEnable():
+CloudNode.getInstance().getCommandManager().registerCommand(new Command("hello", "Says hello", "hi", "greet") {
+    @Override
+    public void execute(CommandSender sender, String[] args) {
+        sender.sendMessage("Hello there, " + sender.getName() + "!");
+    }
+});
+```
+
+---
+
+### 📡 Using the Event System (Cloud Events)
+
+The Cloud Node constantly fires events over its EventBus when important actions occur. 
+
+**Listening to an Event:**
+1. Let your class implement `net.redstone.cloud.api.event.Listener`.
+2. Add methods annotated with `@CloudEventHandler` taking the respective Event class.
+3. Register the listener using `CloudNode.getInstance().getEventManager().registerListeners(this);`.
+
+```java
+import net.redstone.cloud.api.event.Listener;
+import net.redstone.cloud.api.event.CloudEventHandler;
+import net.redstone.cloud.api.event.server.CloudServerStartEvent;
+
+public class MyListener implements Listener {
+    
+    @CloudEventHandler
+    public void onServerStart(CloudServerStartEvent event) {
+        System.out.println("A server started! Name: " + event.getServerName() + " on Port " + event.getPort());
+    }
+}
+```
+
+#### Available Events
+- **Node Events:** `CloudNodeStartEvent`, `CloudNodeShutdownEvent`, `CloudConsoleCommandExecuteEvent`
+- **Server Events:** `CloudServerStartEvent`, `CloudServerStopEvent`, `CloudServerCrashEvent`
+- **Group Events:** `CloudGroupCreateEvent`, `CloudGroupDeleteEvent`
+- **Network / API Events:** `CloudSoftwareDownloadEvent`, `CloudWebTokenCreateEvent`, `CloudPacketReceiveEvent`
+
+---
+
 ## 💻 Usage
 
 ### Starting the Cloud Node

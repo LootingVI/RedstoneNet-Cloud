@@ -11,6 +11,7 @@ import java.io.FileWriter;
 import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Map;
+import net.redstone.cloud.node.CloudNode;
 
 public class GroupManager {
 
@@ -59,12 +60,14 @@ public class GroupManager {
         g.setMinOnline(minOnline);
         groups.put(name.toLowerCase(), g);
         saveGroups();
+        CloudNode.getInstance().getEventManager().callEvent(new net.redstone.cloud.api.event.group.CloudGroupCreateEvent(name));
         Logger.success("Group '" + name + "' created! (port=" + (startPort == 0 ? "dynamic" : startPort) + ", static=" + staticService + ", bedrock=" + bedrockSupport + ")");
     }
 
     public void deleteGroup(String name) {
         if (groups.remove(name.toLowerCase()) != null) {
             saveGroups();
+            CloudNode.getInstance().getEventManager().callEvent(new net.redstone.cloud.api.event.group.CloudGroupDeleteEvent(name));
             Logger.success("Group " + name + " deleted!");
         } else {
             Logger.warn("Group " + name + " not found!");

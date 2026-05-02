@@ -16,6 +16,10 @@ import net.redstone.cloud.node.discord.AuditLogManager;
 import net.redstone.cloud.node.discord.DiscordBot;
 import net.redstone.cloud.api.network.packet.MaintenanceUpdatePacket;
 import net.redstone.cloud.api.network.packet.ServerStatusPacket;
+import net.redstone.cloud.node.plugin.CloudPluginManager;
+import net.redstone.cloud.node.command.CommandManager;
+import net.redstone.cloud.node.command.ConsoleCommandSender;
+import net.redstone.cloud.node.event.EventManager;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -36,6 +40,9 @@ public class CloudNode {
     private WebTokenManager webTokenManager;
     private AuditLogManager auditLogManager;
     private DiscordBot discordBot;
+    private CloudPluginManager pluginManager;
+    private CommandManager commandManager;
+    private EventManager eventManager;
 
     private static CloudNode instance;
     private String host = "127.0.0.1";
@@ -183,6 +190,18 @@ public class CloudNode {
         return discordBot;
     }
 
+    public CloudPluginManager getPluginManager() {
+        return pluginManager;
+    }
+
+    public CommandManager getCommandManager() {
+        return commandManager;
+    }
+
+    public EventManager getEventManager() {
+        return eventManager;
+    }
+
     public String getHost() {
         return host;
     }
@@ -223,6 +242,13 @@ public class CloudNode {
         auditLogManager = new AuditLogManager();
         discordBot = new DiscordBot();
         
+        commandManager = new CommandManager();
+        eventManager = new EventManager();
+
+        pluginManager = new CloudPluginManager();
+        pluginManager.loadPlugins();
+        pluginManager.enablePlugins();
+
         webServer = new WebServer();
         webServer.start();
 
@@ -253,6 +279,8 @@ public class CloudNode {
                 }
             }
         }, "CloudStatus-Thread").start();
+
+        eventManager.callEvent(new net.redstone.cloud.api.event.node.CloudNodeStartEvent("1.0", port));
 
         Logger.info("-------------------------------------------------");
         Logger
@@ -317,6 +345,13 @@ public class CloudNode {
     public void dispatchCommand(String line) {
         if (line == null || line.trim().isEmpty())
             return;
+            
+        eventManager.callEvent(new net.redstone.cloud.api.event.node.CloudConsoleCommandExecuteEvent(line));
+        
+        if (commandManager.dispatchCommand(new ConsoleCommandSender(), line)) {
+            return;
+        }
+
         String[] args = line.split(" ");
         String command = args[0].toLowerCase();
 
@@ -539,6 +574,7 @@ public class CloudNode {
     }
 
     private void shutdown() {
+        eventManager.callEvent(new net.redstone.cloud.api.event.node.CloudNodeShutdownEvent());
         Logger.info("Cloud shutdown triggered. Stopping active sub-servers...");
         if (serverManager != null) {
             serverManager.stopAll();
@@ -548,6 +584,9 @@ public class CloudNode {
         }
         if (webServer != null) {
             webServer.stop();
+        }
+        if (pluginManager != null) {
+            pluginManager.disablePlugins();
         }
         Logger.success("All servers stopped. Goodbye!");
     }

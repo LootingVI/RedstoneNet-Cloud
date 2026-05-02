@@ -13,6 +13,7 @@
         <module>cloud-api</module>
         <module>cloud-node</module>
         <module>cloud-plugin</module>
+        <module>cloud-plugin-test</module>
     </modules>
 
     <properties>

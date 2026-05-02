@@ -1,0 +1,6 @@
+{
+  "name": "CloudTestPlugin",
+  "version": "1.0-SNAPSHOT",
+  "author": "RedstoneNet Team",
+  "main": "net.redstone.cloud.testplugin.TestPlugin"
+}

@@ -1,5 +1,6 @@
 package net.redstone.cloud.node.web;
 
+import net.redstone.cloud.node.CloudNode;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ public class WebTokenManager {
         info.fullAccess = fullAccess;
         if (groupPermissions != null) info.groupPermissions.putAll(groupPermissions);
         tokens.put(tokenStr, info);
+        CloudNode.getInstance().getEventManager().callEvent(new net.redstone.cloud.api.event.network.CloudWebTokenCreateEvent(tokenStr));
         return tokenStr;
     }
 

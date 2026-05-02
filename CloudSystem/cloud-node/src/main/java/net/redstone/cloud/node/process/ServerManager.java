@@ -1,5 +1,6 @@
 package net.redstone.cloud.node.process;
 
+import net.redstone.cloud.api.event.server.CloudServerStartEvent;
 import net.redstone.cloud.node.CloudNode;
 import net.redstone.cloud.node.group.Group;
 import net.redstone.cloud.node.logging.Logger;
@@ -64,13 +65,18 @@ public class ServerManager {
             CloudServerProcess process = new CloudServerProcess(group, id, port);
             activeProcesses.add(process);
             process.start();
+
+            CloudNode.getInstance().getEventManager().callEvent(
+                    new CloudServerStartEvent(process.getServerName(), port));
         }
     }
 
     public void stopServer(String serverName) {
         CloudServerProcess target = getProcess(serverName);
         if (target != null) {
-            if (target.getGroup().getStartPort() <= 0) freePorts.addLast(target.getPort());
+            CloudNode.getInstance().getEventManager().callEvent(new net.redstone.cloud.api.event.server.CloudServerStopEvent(serverName));
+            if (target.getGroup().getStartPort() <= 0)
+                freePorts.addLast(target.getPort());
             target.stop();
             activeProcesses.remove(target);
             playerCounts.remove(serverName);
@@ -94,14 +100,15 @@ public class ServerManager {
                 .orElse(null);
     }
 
-    // Called by CloudServerProcess when restart limit is reached
     public void onProcessCrashed(CloudServerProcess process) {
+        CloudNode.getInstance().getEventManager().callEvent(new net.redstone.cloud.api.event.server.CloudServerCrashEvent(process.getServerName()));
         Logger.error("Server " + process.getServerName() + " has permanently failed!");
-        if (process.getGroup().getStartPort() <= 0) freePorts.addLast(process.getPort());
+        if (process.getGroup().getStartPort() <= 0)
+            freePorts.addLast(process.getPort());
         activeProcesses.remove(process);
         playerCounts.remove(process.getServerName());
 
-            // Maintain minimum instances: start a replacement instead of the crashed one
+        // Maintain minimum instances: start a replacement instead of the crashed one
         Group group = process.getGroup();
         if (group != null && group.getMinOnline() > 0) {
             long running = activeProcesses.stream()
@@ -121,15 +128,16 @@ public class ServerManager {
         if (proc != null) {
             proc.setPlayerCount(count);
             String groupName = serverName.contains("-")
-                ? serverName.substring(0, serverName.lastIndexOf("-"))
-                : serverName;
+                    ? serverName.substring(0, serverName.lastIndexOf("-"))
+                    : serverName;
             checkAutoScale(groupName);
         }
     }
 
     public void checkAutoScale(String groupName) {
         Group group = CloudNode.getInstance().getGroupManager().getGroup(groupName);
-        if (group == null || !group.isAutoScaleEnabled()) return;
+        if (group == null || !group.isAutoScaleEnabled())
+            return;
 
         List<CloudServerProcess> procs = activeProcesses.stream()
                 .filter(p -> p.getServerName().startsWith(group.getName() + "-") && p.isAlive())
@@ -143,7 +151,8 @@ public class ServerManager {
                 .anyMatch(p -> (p.getPlayerCount() * 100.0 / maxP) >= group.getAutoScaleThreshold());
         long lastUp = scaleUpCooldown.getOrDefault(groupName, 0L);
         if (anyOverloaded && running < group.getMaxInstances() && now - lastUp > 30_000L) {
-            Logger.info("[AutoScale] " + groupName + ": scaling UP (" + running + "/" + group.getMaxInstances() + " running, threshold " + group.getAutoScaleThreshold() + "%)");
+            Logger.info("[AutoScale] " + groupName + ": scaling UP (" + running + "/" + group.getMaxInstances()
+                    + " running, threshold " + group.getAutoScaleThreshold() + "%)");
             scaleUpCooldown.put(groupName, now);
             startServer(groupName, 1);
             return;
@@ -154,7 +163,8 @@ public class ServerManager {
             long lastDown = scaleDownCooldown.getOrDefault(groupName, 0L);
             if (now - lastDown > 60_000L) {
                 procs.stream().filter(p -> p.getPlayerCount() == 0).findFirst().ifPresent(p -> {
-                    Logger.info("[AutoScale] " + groupName + ": scaling DOWN (stopping idle " + p.getServerName() + ")");
+                    Logger.info(
+                            "[AutoScale] " + groupName + ": scaling DOWN (stopping idle " + p.getServerName() + ")");
                     scaleDownCooldown.put(groupName, now);
                     stopServer(p.getServerName());
                 });
@@ -188,8 +198,10 @@ public class ServerManager {
                 String[] parts = p.getServerName().split("-");
                 try {
                     int id = Integer.parseInt(parts[parts.length - 1]);
-                    if (id > max) max = id;
-                } catch (Exception ignored) {}
+                    if (id > max)
+                        max = id;
+                } catch (Exception ignored) {
+                }
             }
         }
         return max + 1;
